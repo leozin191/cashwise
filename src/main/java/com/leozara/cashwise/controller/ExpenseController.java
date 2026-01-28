@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/expenses")
@@ -81,5 +82,24 @@ public class ExpenseController {
             @RequestParam LocalDate end) {
         List<Expense> expenses = expenseService.getExpensesByDateRange(start, end);
         return ResponseEntity.ok(expenses);
+    }
+
+
+    @GetMapping("/date/{date}")
+    public ResponseEntity<List<Expense>> getExpensesByDate(@PathVariable LocalDate date) {
+        List<Expense> expenses = expenseService.getExpensesByDate(date);
+        return ResponseEntity.ok(expenses);
+    }
+
+
+    @PostMapping("/bulk")
+    public ResponseEntity<List<Expense>> createMultipleExpenses(@RequestBody List<Expense> expenses) {
+        if (expenses == null || expenses.isEmpty()) {
+            throw new IllegalArgumentException("A lista de gastos não pode ser nula ou vazia.");
+        }
+        List<Expense> savedExpenses = expenses.stream()
+                .map(expenseService::createExpense)
+                .toList();
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedExpenses);
     }
 }

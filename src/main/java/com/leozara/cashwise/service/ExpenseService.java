@@ -14,11 +14,14 @@ import java.util.Optional;
 public class ExpenseService {
 
     private final ExpenseRepository expenseRepository;
+    private final AiService aiService;
 
     // Criar novo gasto
     public Expense createExpense(Expense expense) {
-        // TODO: Aqui vamos chamar a IA pra sugerir categoria!
-        // Por enquanto, só salva
+        if (expense.getCategory() == null || expense.getCategory().isEmpty()) {
+            String suggestedCategory = aiService.suggestCategory(expense.getDescription());
+            expense.setCategory(suggestedCategory);
+        }
         return expenseRepository.save(expense);
     }
 
@@ -64,5 +67,9 @@ public class ExpenseService {
     // Buscar por moeda
     public List<Expense> getExpensesByCurrency(String currency) {
         return expenseRepository.findByCurrency(currency);
+    }
+
+    public List<Expense> getExpensesByDate(LocalDate date) {
+        return expenseRepository.findByDate(date);
     }
 }
