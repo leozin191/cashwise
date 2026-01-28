@@ -85,8 +85,8 @@ cd cashwise
 
 2. **Configure API Key**
 
-Create a new Environment Variable GROQ_API_KEY and copy to:
-RUN -> EDIT CONFIGURATIONS -> Environment Variables
+Create a new Environment Variable (RUN -> EDIT CONFIGURATIONS -> Environment Variables) GROQ_API_KEY and copy to:
+
 ```properties
 groq.api.key=${GROQ_API_KEY}
 ```
