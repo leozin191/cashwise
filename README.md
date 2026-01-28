@@ -85,7 +85,11 @@ cd cashwise
 
 2. **Configure API Key**
 
-Create a new Environment Variable (RUN -> EDIT CONFIGURATIONS -> Environment Variables) GROQ_API_KEY and copy to:
+Create a `.env` file based on `.env.example` and add your Groq API key:
+
+GROQ_API_KEY=your_api_key_here
+
+Or alternatively, set it as an environment variable in your IDE or system.
 
 ```properties
 groq.api.key=${GROQ_API_KEY}
