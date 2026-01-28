@@ -85,9 +85,10 @@ cd cashwise
 
 2. **Configure API Key**
 
-Create `src/main/resources/application-local.properties`:
+Create a new Environment Variable GROQ_API_KEY and copy to:
+RUN -> EDIT CONFIGURATIONS -> Environment Variables
 ```properties
-groq.api.key=your_groq_api_key_here
+groq.api.key=${GROQ_API_KEY}
 ```
 
 3. **Run the application**
