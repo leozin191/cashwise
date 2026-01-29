@@ -25,8 +25,11 @@ public class AiService {
 
     private final RestTemplate restTemplate;
 
-    public AiService() {
+    private final CategoryTranslationService categoryTranslationService;
+
+    public AiService(CategoryTranslationService categoryTranslationService) {
         this.restTemplate = new RestTemplate();
+        this.categoryTranslationService = categoryTranslationService;
     }
 
     public String suggestCategory(String description) {
@@ -59,12 +62,12 @@ public class AiService {
                     .getContent()
                     .trim();
 
-            return category;
+            return categoryTranslationService.translateCategory(category);
 
         } catch (Exception e) {
             System.err.println("Erro ao chamar Groq AI: " + e.getMessage());
             e.printStackTrace();  // Mostra stack trace completo
-            return "Outros";
+            return categoryTranslationService.translateCategory("Other");
         }
     }
 

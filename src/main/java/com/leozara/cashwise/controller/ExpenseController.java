@@ -1,6 +1,8 @@
 package com.leozara.cashwise.controller;
 
+import com.leozara.cashwise.dto.CategorySuggestionResponse;
 import com.leozara.cashwise.model.Expense;
+import com.leozara.cashwise.service.AiService;
 import com.leozara.cashwise.service.ExpenseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +20,7 @@ import java.util.Map;
 public class ExpenseController {
 
     private final ExpenseService expenseService;
+    private final AiService aiService;
 
     // GET /api/expenses - Lista todos os gastos
     @GetMapping
@@ -101,5 +104,22 @@ public class ExpenseController {
                 .map(expenseService::createExpense)
                 .toList();
         return ResponseEntity.status(HttpStatus.CREATED).body(savedExpenses);
+    }
+
+    @GetMapping("/suggest-category")
+    public ResponseEntity<CategorySuggestionResponse> suggestCategory(
+            @RequestParam String description) {
+
+        if (description == null || description.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+
+        String category = aiService.suggestCategory(description);
+
+        CategorySuggestionResponse response =
+                new CategorySuggestionResponse(description, category);
+
+        return ResponseEntity.ok(response);
     }
 }
