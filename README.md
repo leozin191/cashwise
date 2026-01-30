@@ -106,6 +106,7 @@ POST /api/expenses
 | GET | `/api/expenses/date/{date}` | Filter by specific date |
 | GET | `/api/expenses/date-range?start=X&end=Y` | Filter by date range |
 | GET | `/api/expenses/currency/{currency}` | Filter by currency |
+| GET | `/api/expenses/suggest-category?description=X` | Get AI category suggestion (real-time) |
 
 ## How to Run
 
