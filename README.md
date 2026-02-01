@@ -2,12 +2,14 @@
 
 ![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen?style=for-the-badge&logo=springboot)
-![React](https://img.shields.io/badge/React-18-blue?style=for-the-badge&logo=react)
+![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
+![React Native](https://img.shields.io/badge/React%20Native-0.81-blue?style=for-the-badge&logo=react)
+![Expo](https://img.shields.io/badge/Expo-54-black?style=for-the-badge&logo=expo)
 ![AI](https://img.shields.io/badge/AI-Groq%20Llama%203.3-blue?style=for-the-badge&logo=ai)
 ![H2](https://img.shields.io/badge/Database-H2-darkblue?style=for-the-badge&logo=database)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-Full-stack expense tracking application with **automatic AI-powered categorization** using Groq's Llama 3.3 model.
+Full-stack expense tracking application with **automatic AI-powered categorization** using Groq's Llama 3.3 model. Available on **Web** (React) and **Mobile** (React Native).
 
 ---
 
@@ -16,15 +18,16 @@ Full-stack expense tracking application with **automatic AI-powered categorizati
 What makes this project stand out:
 
 - 🤖 **Real-time AI Integration**: Automatic expense categorization using Groq's Llama 3.3-70b model
+- 📱 **Multi-Platform**: Web (React) and Mobile (React Native with Expo) apps
 - 🏗️ **Clean Architecture**: Layered design following SOLID principles (Controller → Service → Repository)
 - 🔐 **Security First**: Secure API key management using environment variables
 - 💾 **Persistent Data**: H2 file-based database ensures data survives restarts
 - 🔄 **RESTful Design**: Proper HTTP methods, status codes, and JSON responses
 - 📦 **Bulk Operations**: Create multiple expenses in a single request
 - 🎯 **Smart Filtering**: Advanced queries by date, category, and currency
-- 📱 **Mobile-First**: Responsive design optimized for mobile devices
-- 📊 **Interactive Charts**: Click-to-filter pie chart visualization
-- 🌐 **i18n Support**: Multi-language support (PT-BR/EN)
+- 📊 **Interactive Charts**: Click-to-filter pie chart visualization on both Web and Mobile
+- 🌐 **i18n Support**: Multi-language support (PT-BR/EN) across all platforms
+- ⚡ **Performance Optimized**: Optimized state management, no duplicate calculations, efficient re-renders
 
 ---
 
@@ -39,7 +42,7 @@ What makes this project stand out:
 -  Secure API key management
 -  Internationalization (i18n) with Portuguese translations
 
-### Frontend (React + Vite)
+### Frontend - Web (React + Vite)
 -  Interactive pie chart - click categories to filter expenses
 -  Real-time AI category suggestions as you type
 -  Mobile-first responsive design
@@ -47,6 +50,18 @@ What makes this project stand out:
 -  Category-based filtering
 -  Clean, modern UI with Tailwind CSS
 -  Live data updates
+
+### Frontend - Mobile (React Native + Expo)
+-  Native mobile app for iOS and Android
+-  Bottom tab navigation (Home, Add Expense)
+-  Expense list with pie chart visualization
+-  Interactive category modal with details
+-  Real-time AI category suggestions
+-  Pull-to-refresh for data updates
+-  Expense creation, editing, and deletion
+-  Multi-language support (PT/EN)
+-  Responsive UI with custom theme system
+-  Environment configuration for API endpoints
 
 ---
 
@@ -60,12 +75,20 @@ What makes this project stand out:
 - **Build Tool:** Maven
 - **ORM:** Spring Data JPA / Hibernate
 
-### Frontend
-- **Library:** React 18
+### Frontend - Web
+- **Library:** React 19
 - **Build Tool:** Vite
 - **Styling:** Tailwind CSS
 - **Charts:** Recharts
 - **HTTP Client:** Axios
+
+### Frontend - Mobile
+- **Framework:** React Native 0.81
+- **Platform:** Expo 54
+- **Charts:** react-native-chart-kit
+- **Navigation:** React Navigation (Bottom Tabs)
+- **HTTP Client:** Axios
+- **State Management:** Context API
 
 ---
 
@@ -148,6 +171,7 @@ POST /api/expenses
 - Java 21+
 - Node.js 18+
 - Maven
+- Expo CLI (for mobile): `npm install -g expo-cli`
 - Groq API Key (free at https://console.groq.com)
 
 ---
@@ -210,6 +234,40 @@ npm run dev
 
 ---
 
+### Mobile Setup
+
+**1. Navigate to mobile folder**
+```bash
+cd mobile
+```
+
+**2. Install dependencies**
+```bash
+npm install
+```
+
+**3. (Optional) Configure custom API URL**
+
+Create `mobile/.env`:
+```
+EXPO_PUBLIC_API_URL=http://localhost:8080/api/expenses
+```
+
+For local network testing, use your machine's IP:
+```
+EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080/api/expenses
+```
+
+**4. Run the mobile app**
+```bash
+npx expo start
+```
+
+**5. View on device**
+- Scan QR code with **Expo Go** app on your phone
+
+---
+
 ##  Mobile Testing (Local Network)
 
 ### Backend Configuration:
@@ -262,6 +320,28 @@ cashwise/
 │   │       └── api.js
 │   └── ...
 │
+├── mobile/
+│   ├── src/
+│   │   ├── components/      # React Native components
+│   │   │   ├── AddExpenseModal.js
+│   │   │   ├── ExpenseCard.js
+│   │   │   └── CategoryLegend.js
+│   │   ├── screens/         # App screens
+│   │   │   ├── HomeScreen.js
+│   │   │   └── AddExpenseScreen.js
+│   │   ├── constants/       # Configuration & themes
+│   │   │   ├── categories.js
+│   │   │   ├── theme.js
+│   │   │   └── translations.js
+│   │   ├── contexts/        # Context API
+│   │   │   └── LanguageContext.js
+│   │   ├── services/        # API integration
+│   │   │   └── api.js
+│   │   └── utils/           # Utility functions
+│   │       └── helpers.js
+│   ├── app.json
+│   └── package.json
+│
 └── src/main/resources/
     ├── messages.properties          # English translations
     ├── messages_pt_BR.properties    # Portuguese translations
@@ -276,14 +356,16 @@ This project demonstrates:
 
 - ✅ **Modern Backend Development**: Latest Spring Boot 4.0 with Java 21
 - ✅ **AI/ML Integration**: Practical use of AI APIs in real-world applications
-- ✅ **Full-Stack Skills**: Complete application from database to UI
+- ✅ **Full-Stack Skills**: Complete application from database to UI (Web & Mobile)
+- ✅ **Multi-Platform Development**: React for Web, React Native for Mobile
 - ✅ **API Design**: RESTful principles and best practices
+- ✅ **State Management**: Optimized state handling across different platforms
 - ✅ **Problem Solving**: Automating tedious manual categorization tasks
 - ✅ **Production-Ready Code**: Proper error handling, validation, and security
 - ✅ **Mobile-First**: Responsive design optimized for mobile devices
 - ✅ **i18n**: Multi-language support showing enterprise-level features
 
-Perfect for showcasing in a **developer portfolio** or as a **learning project** for Spring Boot + React + AI integration.
+Perfect for showcasing in a **developer portfolio** or as a **learning project** for full-stack development with AI integration across multiple platforms.
 
 ---
 
