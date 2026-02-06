@@ -1,18 +1,18 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { getCategoryEmoji, getCategoryColor } from '../constants/categories';
-import { formatCurrency, calculatePercentage } from '../utils/helpers';
-import { colors, spacing, borderRadius, fontSize, fontWeight } from '../constants/theme';
+import { getCategoryColor } from '../constants/categories';
+import { calculatePercentage } from '../utils/helpers';
+import { spacing, borderRadius, fontSize, fontWeight } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
+import CurrencyDisplay from './CurrencyDisplay';
+import CategoryIcon from './CategoryIcon';
 
-export default function CategoryLegend({
-                                           category,
-                                           amount,
-                                           total,
-                                           onPress
-                                       }) {
+export default function CategoryLegend({ category, amount, total, onPress }) {
     const { t } = useLanguage();
+    const { colors } = useTheme();
     const percentage = calculatePercentage(amount, total);
     const color = getCategoryColor(category);
+    const styles = createStyles(colors);
 
     return (
         <TouchableOpacity
@@ -22,18 +22,21 @@ export default function CategoryLegend({
         >
             <View style={styles.left}>
                 <View style={[styles.colorDot, { backgroundColor: color }]} />
-                <Text style={styles.emoji}>{getCategoryEmoji(category)}</Text>
+                <CategoryIcon category={category} size={20} color={color} />
                 <Text style={styles.name}>{t(`categories.${category}`)}</Text>
             </View>
             <View style={styles.right}>
-                <Text style={styles.amount}>{formatCurrency(amount)}</Text>
+                <CurrencyDisplay
+                    amountInEUR={amount}
+                    style={styles.amount}
+                />
                 <Text style={styles.percent}>{percentage}%</Text>
             </View>
         </TouchableOpacity>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
     item: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -48,16 +51,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
+        gap: spacing.sm,
     },
     colorDot: {
         width: 12,
         height: 12,
         borderRadius: borderRadius.full,
-        marginRight: spacing.sm,
-    },
-    emoji: {
-        fontSize: fontSize.xl + 2,
-        marginRight: spacing.sm,
     },
     name: {
         fontSize: fontSize.base,

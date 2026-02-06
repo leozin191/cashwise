@@ -176,37 +176,48 @@ export const animations = {
     normal: 300,
     slow: 500,
 };
-
 // ========================================
-// HELPERS - Funções úteis
+// DARK THEME
 // ========================================
+export const darkColors = {
+    // Primárias
+    primary: '#818CF8',
+    primaryLight: '#A5B4FC',
+    primaryDark: '#6366F1',
+    primaryBg: 'rgba(129, 140, 248, 0.15)',
 
-// Retorna padding uniforme
-export const padding = (size) => ({
-    padding: spacing[size] || size,
-});
+    // Secundárias
+    secondary: '#F472B6',
 
-// Retorna padding vertical
-export const paddingVertical = (size) => ({
-    paddingVertical: spacing[size] || size,
-});
+    // Status
+    success: '#34D399',
+    error: '#F87171',
+    warning: '#FBBF24',
+    info: '#60A5FA',
 
-// Retorna padding horizontal
-export const paddingHorizontal = (size) => ({
-    paddingHorizontal: spacing[size] || size,
-});
+    // Backgrounds
+    background: '#0F172A',
+    surface: '#1E293B',
+    overlay: 'rgba(0, 0, 0, 0.7)',
 
-// Retorna margin uniforme
-export const margin = (size) => ({
-    margin: spacing[size] || size,
-});
+    // Textos
+    text: '#F1F5F9',
+    textLight: '#CBD5E1',
+    textLighter: '#94A3B8',
+    textWhite: '#FFFFFF',
+    textDisabled: '#475569',
 
-// Retorna margin vertical
-export const marginVertical = (size) => ({
-    marginVertical: spacing[size] || size,
-});
+    // Borders
+    border: '#334155',
+    borderLight: '#1E293B',
 
-// Retorna margin horizontal
-export const marginHorizontal = (size) => ({
-    marginHorizontal: spacing[size] || size,
-});
+    // Categorias
+    categoryFood: '#EF4444',
+    categoryTransport: '#3B82F6',
+    categoryHousing: '#F59E0B',
+    categoryEntertainment: '#A78BFA',
+    categoryHealth: '#10B981',
+    categoryEducation: '#818CF8',
+    categoryShopping: '#EC4899',
+    categoryOther: '#6B7280',
+};

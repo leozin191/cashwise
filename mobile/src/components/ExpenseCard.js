@@ -1,32 +1,56 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { getCategoryEmoji, normalizeCategory } from '../constants/categories';
-import { formatDate, formatCurrency } from '../utils/helpers';
-import { colors, spacing, fontSize, fontWeight } from '../constants/theme';
+import { normalizeCategory } from '../constants/categories';
+import { formatDate } from '../utils/helpers';
+import { spacing, fontSize, fontWeight, borderRadius } from '../constants/theme';
+import CurrencyDisplay from './CurrencyDisplay';
+import { getCurrencyByCode } from '../constants/currencies';
+import { useCurrency } from '../contexts/CurrencyContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import CategoryIcon from './CategoryIcon';
 
 export default function ExpenseCard({ expense }) {
+    const { currency } = useCurrency();
+    const { colors } = useTheme();
+    const { language } = useLanguage();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.card}>
             <View style={styles.left}>
-                <Text style={styles.emoji}>
-                    {getCategoryEmoji(normalizeCategory(expense.category))}
-                </Text>
-                <View>
-                    <Text style={styles.description}>
+                <View style={styles.iconContainer}>
+                    <CategoryIcon
+                        category={normalizeCategory(expense.category)}
+                        size={28}
+                        color={colors.primary}
+                    />
+                </View>
+                <View style={styles.textContainer}>
+                    <Text style={styles.description} numberOfLines={1}>
                         {expense.description}
                     </Text>
                     <Text style={styles.date}>
-                        {formatDate(expense.date)}
+                        {formatDate(expense.date, language)}
                     </Text>
                 </View>
             </View>
-            <Text style={styles.amount}>
-                {formatCurrency(expense.amount)}
-            </Text>
+            <View>
+                <CurrencyDisplay
+                    amountInEUR={expense.amount}
+                    originalCurrency={expense.currency}
+                    style={styles.amount}
+                />
+                {expense.currency && expense.currency !== currency && (
+                    <Text style={styles.originalAmount}>
+                        ({getCurrencyByCode(expense.currency).symbol}{expense.amount.toFixed(2)} {expense.currency})
+                    </Text>
+                )}
+            </View>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
     card: {
         backgroundColor: colors.surface,
         padding: spacing.lg,
@@ -42,8 +66,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         flex: 1,
     },
-    emoji: {
-        fontSize: fontSize.xxxl - 2,
+    textContainer: {
+        flex: 1,
+        marginRight: spacing.md,
+    },
+    iconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.primaryBg,
+        justifyContent: 'center',
+        alignItems: 'center',
         marginRight: spacing.md,
     },
     description: {
@@ -60,5 +93,10 @@ const styles = StyleSheet.create({
         fontSize: fontSize.lg + 1,
         fontWeight: fontWeight.bold,
         color: colors.text,
+    },
+    originalAmount: {
+        fontSize: fontSize.xs,
+        color: colors.textLight,
+        marginTop: spacing.xs,
     },
 });

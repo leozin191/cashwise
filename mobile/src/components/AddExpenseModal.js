@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import {useEffect, useState} from 'react';
 import {
     View,
     Text,
@@ -11,17 +11,81 @@ import {
 } from 'react-native';
 import { expenseService } from '../services/api';
 import { CATEGORIES, getCategoryEmoji, getCategoryColor } from '../constants/categories';
-import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { CURRENCIES } from '../constants/currencies';
+import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useCurrency } from '../contexts/CurrencyContext';
+import { getBudgets, calculateProgress, getAlertLevel } from '../utils/budgets';
+import { filterByThisMonth } from '../utils/helpers';
+import CategoryIcon from './CategoryIcon';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function AddExpenseModal({ visible, onClose, onSuccess, expenseToEdit = null }) {
     const { t } = useLanguage();
+    const { currency, getCurrencyInfo } = useCurrency();
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
 
     const [description, setDescription] = useState(expenseToEdit?.description || '');
     const [amount, setAmount] = useState(expenseToEdit?.amount?.toString() || '');
     const [category, setCategory] = useState(expenseToEdit?.category || '');
     const [saving, setSaving] = useState(false);
+    const [selectedCurrency, setSelectedCurrency] = useState(expenseToEdit?.currency || currency);
+    const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
+    useEffect(() => {
+        if (expenseToEdit) {
+            setDescription(expenseToEdit.description);
+            setAmount(expenseToEdit.amount.toString());
+            setCategory(expenseToEdit.category || '');
+            setSelectedCurrency(expenseToEdit.currency || currency);
+        }
+    }, [expenseToEdit, currency]);
+
+
+    const checkBudgetAlert = async (expense) => {
+        try {
+            const budgets = await getBudgets();
+            const expenseCategory = expense.category;
+
+            if (!budgets[expenseCategory]) return; // Sem meta para esta categoria
+
+            // Pega todas as despesas do mês
+            const allExpenses = await expenseService.getAll();
+            const thisMonth = filterByThisMonth(allExpenses);
+
+            // Calcula total da categoria
+            const categoryTotal = thisMonth
+                .filter(exp => exp.category === expenseCategory)
+                .reduce((sum, exp) => sum + exp.amount, 0);
+
+            const budget = budgets[expenseCategory];
+            const progress = calculateProgress(categoryTotal, budget.limit);
+            const level = getAlertLevel(progress);
+
+            // Alerta se passou de 80%
+            if (level === 'warning') {
+                setTimeout(() => {
+                    Alert.alert(
+                        `⚠️ ${t('budgetWarning')} ${progress.toFixed(0)}%`,
+                        `${t(`categories.${expenseCategory}`)}: €${categoryTotal.toFixed(2)} de €${budget.limit.toFixed(0)}`,
+                        [{ text: 'OK' }]
+                    );
+                }, 1000);
+            } else if (level === 'critical') {
+                setTimeout(() => {
+                    Alert.alert(
+                        `🚨 ${t('budgetCritical')}`,
+                        `${t(`categories.${expenseCategory}`)}: €${categoryTotal.toFixed(2)} de €${budget.limit.toFixed(0)}`,
+                        [{ text: 'OK' }]
+                    );
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('Error checking budget:', error);
+        }
+    };
 
     const handleSave = async () => {
         if (!description.trim()) {
@@ -38,7 +102,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             const expenseData = {
                 description: description.trim(),
                 amount: parseFloat(amount),
-                currency: 'EUR',
+                currency: selectedCurrency,
                 date: expenseToEdit?.date || new Date().toISOString().split('T')[0],
                 ...(category && { category }),
             };
@@ -50,6 +114,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                 ]);
             } else {
                 const result = await expenseService.create(expenseData);
+
+                // Verifica metas de gastos
+                await checkBudgetAlert(result);
 
                 if (!category && result.category) {
                     Alert.alert(
@@ -77,6 +144,8 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
         setDescription('');
         setAmount('');
         setCategory('');
+        setShowAdvanced(false);
+        setShowCurrencyPicker(false);
         onClose();
     };
 
@@ -126,7 +195,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('amount')}</Text>
                             <View style={styles.amountContainer}>
-                                <Text style={styles.currencySymbol}>€</Text>
+                                <Text style={styles.currencySymbol}>
+                                    {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || getCurrencyInfo().symbol}
+                                </Text>
                                 <TextInput
                                     style={styles.amountInput}
                                     placeholder="0.00"
@@ -154,9 +225,16 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                         ]}
                                         onPress={() => setCategory(category === cat ? '' : cat)}
                                     >
-                                        <Text style={styles.categoryEmoji}>
-                                            {getCategoryEmoji(cat)}
-                                        </Text>
+                                        <View style={[
+                                            styles.categoryIconWrapper,
+                                            category === cat && styles.categoryIconWrapperSelected
+                                        ]}>
+                                            <CategoryIcon
+                                                category={cat}
+                                                size={18}
+                                                color={category === cat ? colors.textWhite : colors.primary}
+                                            />
+                                        </View>
                                         <Text
                                             style={[
                                                 styles.categoryText,
@@ -169,6 +247,69 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 ))}
                             </View>
                         </View>
+
+                        {/* Opções Avançadas */}
+                        <TouchableOpacity
+                            style={styles.advancedToggle}
+                            onPress={() => setShowAdvanced(!showAdvanced)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.advancedToggleText}>
+                                ⚙️ Opções avançadas
+                            </Text>
+                            <Text style={styles.advancedToggleArrow}>
+                                {showAdvanced ? '▲' : '▼'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Seção Avançada (expandível) */}
+                        {showAdvanced && (
+                            <View style={styles.advancedSection}>
+                                {/* Moeda */}
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.label}>💱 {t('currency')}</Text>
+                                    <TouchableOpacity
+                                        style={styles.currencySelector}
+                                        onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
+                                    >
+                                        <Text style={styles.currencySelectorText}>
+                                            {CURRENCIES.find(c => c.code === selectedCurrency)?.flag} {selectedCurrency} - {CURRENCIES.find(c => c.code === selectedCurrency)?.name}
+                                        </Text>
+                                        <Text style={styles.currencySelectorArrow}>▼</Text>
+                                    </TouchableOpacity>
+
+                                    {showCurrencyPicker && (
+                                        <ScrollView style={styles.currencyDropdown} nestedScrollEnabled={true}>
+                                            {CURRENCIES.map((curr) => (
+                                                <TouchableOpacity
+                                                    key={curr.code}
+                                                    style={[
+                                                        styles.currencyOption,
+                                                        selectedCurrency === curr.code && styles.currencyOptionActive
+                                                    ]}
+                                                    onPress={() => {
+                                                        setSelectedCurrency(curr.code);
+                                                        setShowCurrencyPicker(false);
+                                                    }}
+                                                >
+                                                    <Text style={styles.currencyOptionFlag}>{curr.flag}</Text>
+                                                    <Text style={styles.currencyOptionText}>
+                                                        {curr.code} - {curr.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    )}
+                                </View>
+
+                                {/* Informação sobre moeda padrão */}
+                                <View style={styles.infoBox}>
+                                    <Text style={styles.infoText}>
+                                        ℹ️ Por padrão, despesas são salvas em {CURRENCIES.find(c => c.code === currency)?.flag} {currency}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
 
                         {/* Botão Salvar */}
                         <TouchableOpacity
@@ -186,6 +327,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 }
                             </Text>
                         </TouchableOpacity>
+                        {/* Espaço extra quando avançado está aberto */}
+                        {showAdvanced && showCurrencyPicker && (
+                            <View style={{ height: 200 }} />
+                        )}
                     </ScrollView>
                 </View>
             </View>
@@ -193,7 +338,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: colors.overlay,
@@ -299,9 +444,17 @@ const styles = StyleSheet.create({
         borderColor: colors.border,
         backgroundColor: colors.surface,
     },
-    categoryEmoji: {
-        fontSize: fontSize.xl,
-        marginRight: spacing.xs + 2,
+    categoryIconWrapper: {
+        width: 32,
+        height: 32,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.primaryBg,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.sm,
+    },
+    categoryIconWrapperSelected: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
     },
     categoryText: {
         fontSize: fontSize.sm + 1,
@@ -328,5 +481,91 @@ const styles = StyleSheet.create({
         color: colors.textWhite,
         fontSize: fontSize.xl,
         fontWeight: fontWeight.bold,
+    },
+    currencySelector: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    currencySelectorText: {
+        fontSize: fontSize.lg,
+        color: colors.text,
+        fontWeight: fontWeight.semibold,
+    },
+    currencySelectorArrow: {
+        fontSize: fontSize.sm,
+        color: colors.textLight,
+    },
+    currencyDropdown: {
+        marginTop: spacing.sm,
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        maxHeight: 180,
+        ...shadows.large,
+    },
+    currencyOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderLight,
+    },
+    currencyOptionActive: {
+        backgroundColor: colors.primaryBg,
+    },
+    currencyOptionFlag: {
+        fontSize: fontSize.xl,
+        marginRight: spacing.sm,
+    },
+    currencyOptionText: {
+        fontSize: fontSize.sm,
+        color: colors.text,
+    },
+    advancedToggle: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    advancedToggleText: {
+        fontSize: fontSize.base,
+        fontWeight: fontWeight.semibold,
+        color: colors.textLight,
+    },
+    advancedToggleArrow: {
+        fontSize: fontSize.sm,
+        color: colors.textLight,
+    },
+    advancedSection: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    infoBox: {
+        backgroundColor: colors.primaryBg,
+        padding: spacing.md,
+        borderRadius: borderRadius.sm,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.primary,
+    },
+    infoText: {
+        fontSize: fontSize.sm,
+        color: colors.primary,
+        lineHeight: 18,
     },
 });

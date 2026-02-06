@@ -1,8 +1,23 @@
-HELP.md
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
+!.env.example
+!mobile/.env.example
+
+### Database ###
+/data/
+*.mv.db
+*.trace.db
+
+### Spring Boot ###
 target/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+application-local.properties
+
+### Maven ###
+.mvn/wrapper/maven-wrapper.jar
 
 ### STS ###
 .apt_generated
@@ -14,7 +29,7 @@ target/
 .sts4-cache
 
 ### IntelliJ IDEA ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
@@ -31,11 +46,12 @@ build/
 
 ### VS Code ###
 .vscode/
-application-local.properties
 
-### Database ###
-/data/
-*.mv.db
-*.trace.db
+### macOS ###
+.DS_Store
+Thumbs.db
 
-.env.*
+### Logs ###
+*.log
+
+HELP.md

@@ -1,123 +1,87 @@
 package com.leozara.cashwise.service;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.*;
 
 @Service
 public class AiService {
 
     @Value("${groq.api.key}")
-    private String apiKey;
+    private String groqApiKey;
 
-    @Value("${groq.api.url}")
-    private String apiUrl;
+    private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-    @Value("${groq.model}")
-    private String model;
-
-    private final RestTemplate restTemplate;
-
-    private final CategoryTranslationService categoryTranslationService;
-
-    public AiService(CategoryTranslationService categoryTranslationService) {
-        this.restTemplate = new RestTemplate();
-        this.categoryTranslationService = categoryTranslationService;
-    }
+    private static final Set<String> VALID_CATEGORIES = Set.of(
+            "Food", "Delivery", "Groceries", "Shopping", "Restaurants", "Transport", "Travel",
+            "Entertainment", "Health", "Services", "General", "Utilities",
+            "Cash", "Transfers", "Insurance", "Wealth", "Refund",
+            "Cashback", "ChildAllowance", "Investment", "Loan", "Credit",
+            "Savings", "Donation", "Salary", "Gift", "TopUps",
+            "NetSales", "Interest", "Remittances"
+    );
 
     public String suggestCategory(String description) {
         try {
-            // 1. Monta o prompt
-            String prompt = buildPrompt(description);
-
-            // 2. Cria o request
-            GroqRequest request = new GroqRequest(model, prompt);
-
-            // 3. Configura headers
+            RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
+            headers.setBearerAuth(groqApiKey);
 
-            // 4. Monta a requisição completa
-            HttpEntity<GroqRequest> entity = new HttpEntity<>(request, headers);
+            String prompt = "Categorize this expense: '" + description +
+                    "'. Return ONLY ONE category name from this exact list (use the exact spelling): " +
+                    "Food, Delivery, Groceries, Shopping, Restaurants, Transport, Travel, Entertainment, Health, " +
+                    "Services, General, Utilities, Cash, Transfers, Insurance, Wealth, Refund, " +
+                    "Cashback, ChildAllowance, Investment, Loan, Credit, Savings, Donation, " +
+                    "Salary, Gift, TopUps, NetSales, Interest, Remittances. " +
+                    "Examples: " +
+                    "- 'bought groceries at supermarket' -> Groceries, " +
+                    "- 'ordered pizza on iFood' -> Delivery, " +
+                    "- 'burger at McDonald's' -> Food, " +
+                    "- 'lunch at restaurant' -> Restaurants, " +
+                    "- 'paid electricity bill' -> Utilities, " +
+                    "- 'uber ride' -> Transport. " +
+                    "Return ONLY the category name, nothing else.";
 
-            // 5. Faz a chamada HTTP POST
-            ResponseEntity<GroqResponse> response = restTemplate.postForEntity(
-                    apiUrl,
-                    entity,
-                    GroqResponse.class
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", "llama-3.3-70b-versatile");
+            requestBody.put("messages", List.of(
+                    Map.of("role", "user", "content", prompt)
+            ));
+            requestBody.put("temperature", 0.1);
+            requestBody.put("max_tokens", 50);
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    GROQ_API_URL,
+                    HttpMethod.POST,
+                    request,
+                    Map.class
             );
 
-            // 6. Extrai a categoria da resposta
-            String category = response.getBody()
-                    .getChoices()[0]
-                    .getMessage()
-                    .getContent()
-                    .trim();
+            Map<String, Object> responseBody = response.getBody();
+            if (responseBody != null && responseBody.containsKey("choices")) {
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) responseBody.get("choices");
+                if (!choices.isEmpty()) {
+                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                    String category = ((String) message.get("content")).trim();
 
-            return categoryTranslationService.translateCategory(category);
+                    // Valida se a categoria está na lista
+                    if (VALID_CATEGORIES.contains(category)) {
+                        return category;
+                    }
+                }
+            }
+
+            // Fallback para General se algo deu errado
+            return "General";
 
         } catch (Exception e) {
-            System.err.println("Erro ao chamar Groq AI: " + e.getMessage());
-            e.printStackTrace();  // Mostra stack trace completo
-            return categoryTranslationService.translateCategory("Other");
+            System.err.println("Erro ao sugerir categoria: " + e.getMessage());
+            return "General";
         }
-    }
-
-    private String buildPrompt(String description) {
-        return "Categorize this expense in ONE WORD ONLY. " +
-                "Description: '" + description + "'. " +
-                "Choose ONLY from: Food, Transport, Housing, Entertainment, Health, Education, Shopping, Other. " +
-                "Return ONLY the category name, nothing else.";
-    }
-
-    // Inner classes com @Data do Lombok (gera getters/setters automaticamente)
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    static class GroqRequest {
-        private String model;
-        private GroqMessage[] messages;
-        private int max_tokens;
-        private double temperature;
-
-        public GroqRequest(String model, String userMessage) {
-            this.model = model;
-            this.messages = new GroqMessage[]{
-                    new GroqMessage("user", userMessage)
-            };
-            this.max_tokens = 20;
-            this.temperature = 0.3;
-        }
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    static class GroqMessage {
-        private String role;
-        private String content;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    static class GroqResponse {
-        private GroqChoice[] choices;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    static class GroqChoice {
-        private GroqMessage message;
     }
 }

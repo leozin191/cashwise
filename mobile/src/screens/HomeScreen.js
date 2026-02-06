@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect} from 'react';
 import {
     View,
     Text,
@@ -8,19 +8,27 @@ import {
     RefreshControl,
     Alert,
     Modal,
+    TextInput,
 } from 'react-native';
 
 import { PieChart } from 'react-native-chart-kit';
 
 import { expenseService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
+import ExpenseDetailModal from '../components/ExpenseDetailModal';
 import CategoryLegend from '../components/CategoryLegend';
 import AddExpenseModal from '../components/AddExpenseModal';
 
 import { CATEGORY_COLORS, normalizeCategory } from '../constants/categories';
-import { colors, spacing, borderRadius, fontSize, fontWeight, shadows, sizes } from '../constants/theme';
-import { filterByThisMonth, filterByLast30Days, filterByAll } from '../utils/helpers';
+import { getCurrencyByCode } from '../constants/currencies';
+import { spacing, borderRadius, fontSize, fontWeight, shadows, sizes } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useCurrency } from '../contexts/CurrencyContext';
+import CurrencyDisplay from '../components/CurrencyDisplay';
+import MonthlyChart from '../components/MonthlyChart';
+import FadeIn from '../components/FadeIn';
+import { filterByThisMonth, filterByLast30Days, filterByAll, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
 
 export default function HomeScreen() {
     // Estados
@@ -29,14 +37,28 @@ export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [detailExpense, setDetailExpense] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
 
     // Idioma
     const { language, changeLanguage, t } = useLanguage();
 
+    // Tema
+    const { colors } = useTheme();
+
+    // Moeda
+    const { currency, getCurrencyInfo } = useCurrency();
+
     // Filtro
-    const [filter, setFilter] = useState('all'); // 'all', 'thisMonth', 'last30Days'
+    const [filter, setFilter] = useState('thisMonth');
+
+    // Busca
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Ordenação
+    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'highest', 'lowest'
+    const [showSortMenu, setShowSortMenu] = useState(false);
 
     useEffect(() => {
         loadExpenses();
@@ -77,7 +99,22 @@ export default function HomeScreen() {
     };
 
     const getCategoryExpenses = () => {
-        return expenses.filter((exp) => normalizeCategory(exp.category) === selectedCategory);
+        const filtered = filteredExpenses.filter((exp) => normalizeCategory(exp.category) === selectedCategory);
+        return applySorting(filtered);
+    };
+
+    // Função: Aplicar ordenação
+    const applySorting = (expensesToSort) => {
+        switch (sortBy) {
+            case 'oldest':
+                return sortByOldest(expensesToSort);
+            case 'highest':
+                return sortByHighest(expensesToSort);
+            case 'lowest':
+                return sortByLowest(expensesToSort);
+            default: // 'newest'
+                return sortByNewest(expensesToSort);
+        }
     };
 
     const getCategoryTotal = (category) => {
@@ -86,8 +123,8 @@ export default function HomeScreen() {
             .reduce((sum, exp) => sum + exp.amount, 0);
     };
 
-    // Função: Aplicar filtro
-    const getFilteredExpenses = () => {
+    // Função: Aplicar filtro de data
+    const getDateFilteredExpenses = () => {
         switch (filter) {
             case 'thisMonth':
                 return filterByThisMonth(expenses);
@@ -96,6 +133,24 @@ export default function HomeScreen() {
             default:
                 return filterByAll(expenses);
         }
+    };
+
+    // Função: Aplicar busca
+    const getSearchFilteredExpenses = (expensesToFilter) => {
+        if (!searchQuery.trim()) {
+            return expensesToFilter;
+        }
+
+        const query = searchQuery.toLowerCase().trim();
+        return expensesToFilter.filter(exp =>
+            exp.description.toLowerCase().includes(query)
+        );
+    };
+
+    // Função: Aplicar ambos os filtros
+    const getFilteredExpenses = () => {
+        const dateFiltered = getDateFilteredExpenses();
+        return getSearchFilteredExpenses(dateFiltered);
     };
 
     // Despesas filtradas para usar no gráfico e cálculos
@@ -118,6 +173,11 @@ export default function HomeScreen() {
         legendFontSize: 0,
     }));
 
+    // Estatísticas
+    const highestExpense = getHighestExpense(filteredExpenses);
+    const averagePerDay = getAveragePerDay(filteredExpenses);
+    const topCategory = getTopCategory(filteredExpenses);
+
     const handleEditExpense = (expense) => {
         setExpenseToEdit(expense);
         setShowAddModal(true);
@@ -128,6 +188,8 @@ export default function HomeScreen() {
         setShowAddModal(false);
         setExpenseToEdit(null);
     };
+
+    const styles = createStyles(colors);
 
     if (loading) {
         return (
@@ -141,28 +203,15 @@ export default function HomeScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <Text style={styles.headerTitle}>💰 {t('appName')}</Text>
-
-                    {/* Seletor de idioma */}
-                    <TouchableOpacity
-                        style={styles.languageSelector}
-                        onPress={() => changeLanguage(language === 'pt' ? 'en' : 'pt')}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.languageFlag}>
-                            {language === 'pt' ? '🇵🇹' : '🇬🇧'}
-                        </Text>
-                        <Text style={styles.languageCode}>
-                            {language.toUpperCase()}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+                <Text style={styles.headerTitle}>💰 {t('appName')}</Text>
 
                 <View style={styles.headerStats}>
                     <View>
                         <Text style={styles.headerLabel}>{t('total')}</Text>
-                        <Text style={styles.headerAmount}>€{filteredTotal.toFixed(2)}</Text>
+                        <CurrencyDisplay
+                            amountInEUR={filteredTotal}
+                            style={styles.headerAmount}
+                        />
                     </View>
                     <View style={styles.divider} />
                     <View>
@@ -170,6 +219,26 @@ export default function HomeScreen() {
                         <Text style={styles.headerCount}>{filteredExpenses.length}</Text>
                     </View>
                 </View>
+            </View>
+            {/* Campo de Busca */}
+            <View style={styles.searchContainer}>
+                <Text style={styles.searchIcon}>🔍</Text>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder={t('searchExpenses')}
+                    placeholderTextColor={colors.textLight}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity
+                        onPress={() => setSearchQuery('')}
+                        style={styles.clearButton}
+                    >
+                        <Text style={styles.clearButtonText}>✕</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Conteúdo */}
@@ -190,10 +259,18 @@ export default function HomeScreen() {
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyEmoji}>🔍</Text>
                             <Text style={styles.emptyText}>
-                                {filter === 'thisMonth' ? t('noExpensesThisMonth') : t('noExpensesLast30Days')}
+                                {searchQuery.trim()
+                                    ? t('noResultsFound')
+                                    : filter === 'thisMonth'
+                                        ? t('noExpensesThisMonth')
+                                        : t('noExpensesLast30Days')
+                                }
                             </Text>
                             <Text style={styles.emptySubtext}>
-                                {t('tryAnotherPeriod')}
+                                {searchQuery.trim()
+                                    ? t('noResultsFoundSubtext')
+                                    : t('tryAnotherPeriod')
+                                }
                             </Text>
                         </View>
 
@@ -234,8 +311,9 @@ export default function HomeScreen() {
                     <View style={styles.chartSection}>
                         {/* Gráfico */}
                         {filteredChartData.length > 0 && (
-                            <View style={styles.chartContainer}>
-                                <Text style={styles.chartTitle}>📊 {t('chartTitle')}</Text>
+                            <FadeIn delay={100}>
+                                <View style={styles.chartContainer}>
+                                    <Text style={styles.chartTitle}>📊 {t('chartTitle')}</Text>
                                 <View style={styles.pieWrapper}>
                                     <PieChart
                                         data={filteredChartData}
@@ -253,6 +331,7 @@ export default function HomeScreen() {
                                     />
                                 </View>
                             </View>
+                            </FadeIn>
                         )}
 
                         {/* Filtros */}
@@ -288,8 +367,73 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                         </View>
 
+                        {/* Estatísticas */}
+                        {/* Estatísticas */}
+                        <FadeIn delay={300}>
+                            <View style={styles.statsContainer}>
+                            <Text style={styles.statsTitle}>📊 {t('statistics')}</Text>
+
+                            <View style={styles.statsGrid}>
+                                {/* Maior gasto */}
+                                {highestExpense && (
+                                    <View style={styles.statCard}>
+                                        <Text style={styles.statLabel}>{t('highestExpense')}</Text>
+                                        <CurrencyDisplay
+                                            amountInEUR={highestExpense.amount}
+                                            originalCurrency={highestExpense.currency}
+                                            style={styles.statValue}
+                                        />
+                                        <Text style={styles.statSubtext}>
+                                            {highestExpense.description}
+                                            {highestExpense.currency && highestExpense.currency !== currency && (
+                                                ` (${getCurrencyByCode(highestExpense.currency).symbol}${highestExpense.amount.toFixed(2)} ${highestExpense.currency})`
+                                            )}
+                                        </Text>
+                                    </View>
+                                )}
+
+                                {/* Média por dia */}
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statLabel}>{t('averagePerDay')}</Text>
+                                    <CurrencyDisplay
+                                        amountInEUR={averagePerDay}
+                                        style={styles.statValue}
+                                    />
+                                    <Text style={styles.statSubtext}>
+                                        {filteredExpenses.length} {t('expenses').toLowerCase()}
+                                    </Text>
+                                </View>
+
+                                {/* Categoria top */}
+                                {topCategory && (
+                                    <View style={styles.statCard}>
+                                        <Text style={styles.statLabel}>{t('topCategory')}</Text>
+                                        <Text style={styles.statValue}>
+                                            {t(`categories.${normalizeCategory(topCategory.name)}`)}
+                                        </Text>
+                                        <View style={{ flexDirection: 'row' }}>
+                                            <Text style={styles.statSubtext}>
+                                                {topCategory.percentage}% •
+                                            </Text>
+                                            <CurrencyDisplay
+                                                amountInEUR={topCategory.amount}
+                                                style={styles.statSubtext}
+                                            />
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
+                            </View>
+                        </FadeIn>
+
+                        {/* Gráfico de Evolução Mensal */}
+                        <FadeIn delay={500}>
+                            <MonthlyChart expenses={expenses} />
+                        </FadeIn>
+
                         {/* Legendas */}
-                        <View style={styles.legendsContainer}>
+                        <FadeIn delay={700}>
+                            <View style={styles.legendsContainer}>
                             <Text style={styles.legendsTitle}>💡 {t('tapToSeeDetails')}</Text>
 
                             {filteredChartData
@@ -304,7 +448,8 @@ export default function HomeScreen() {
                                         onPress={() => handleCategoryPress(item.name)}
                                     />
                                 ))}
-                        </View>
+                            </View>
+                        </FadeIn>
                     </View>
                 )}
             </ScrollView>
@@ -327,6 +472,48 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                         </View>
 
+                        {/* Menu de Ordenação */}
+                        {getCategoryExpenses().length > 0 && (
+                            <View style={styles.sortContainer}>
+                                <Text style={styles.sortLabel}>{t('sortBy')}:</Text>
+                                <TouchableOpacity
+                                    style={styles.sortButton}
+                                    onPress={() => setShowSortMenu(!showSortMenu)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.sortButtonText}>
+                                        {t(sortBy)} ▼
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {/* Dropdown de opções */}
+                                {showSortMenu && (
+                                    <View style={styles.sortDropdown}>
+                                        {['newest', 'oldest', 'highest', 'lowest'].map((option) => (
+                                            <TouchableOpacity
+                                                key={option}
+                                                style={[
+                                                    styles.sortOption,
+                                                    sortBy === option && styles.sortOptionActive
+                                                ]}
+                                                onPress={() => {
+                                                    setSortBy(option);
+                                                    setShowSortMenu(false);
+                                                }}
+                                            >
+                                                <Text style={[
+                                                    styles.sortOptionText,
+                                                    sortBy === option && styles.sortOptionTextActive
+                                                ]}>
+                                                    {t(option)}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
                         {getCategoryExpenses().length === 0 ? (
                             <View style={styles.emptyCategory}>
                                 <Text style={styles.emptyCategoryText}>{t('noExpenses')}</Text>
@@ -337,7 +524,10 @@ export default function HomeScreen() {
                                     <View key={item.id} style={styles.expenseItemContainer}>
                                         <TouchableOpacity
                                             activeOpacity={0.7}
-                                            onPress={() => handleEditExpense(item)}
+                                            onPress={() => {
+                                                setShowCategoryModal(false);
+                                                setTimeout(() => setDetailExpense(item), 300);
+                                            }}
                                             style={styles.expenseCardTouchable}
                                         >
                                             <ExpenseCard expense={item} />
@@ -353,7 +543,6 @@ export default function HomeScreen() {
                                                         style: 'destructive',
                                                         onPress: () => {
                                                             handleDeleteExpense(item.id);
-                                                            setShowCategoryModal(false);
                                                         },
                                                     },
                                                 ]);
@@ -368,6 +557,15 @@ export default function HomeScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Modal de Detalhes */}
+            <ExpenseDetailModal
+                visible={!!detailExpense}
+                expense={detailExpense}
+                onClose={() => setDetailExpense(null)}
+                onEdit={handleEditExpense}
+                onDelete={handleDeleteExpense}
+            />
 
             {/* Modal de Adicionar/Editar */}
             <AddExpenseModal
@@ -385,7 +583,7 @@ export default function HomeScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
@@ -404,33 +602,11 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: borderRadius.xxl,
         borderBottomRightRadius: borderRadius.xxl,
     },
-    headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: spacing.lg,
-    },
     headerTitle: {
         fontSize: fontSize.xxxl,
         fontWeight: fontWeight.bold,
         color: colors.textWhite,
-    },
-    languageSelector: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        paddingVertical: spacing.xs,
-        paddingHorizontal: spacing.md,
-        borderRadius: borderRadius.lg,
-    },
-    languageFlag: {
-        fontSize: fontSize.lg,
-        marginRight: spacing.xs,
-    },
-    languageCode: {
-        fontSize: fontSize.sm,
-        fontWeight: fontWeight.semibold,
-        color: colors.textWhite,
+        marginBottom: spacing.lg,
     },
     headerStats: {
         flexDirection: 'row',
@@ -596,7 +772,10 @@ const styles = StyleSheet.create({
     fabIcon: {
         color: colors.textWhite,
         fontSize: fontSize.giant,
-        fontWeight: fontWeight.light,
+        fontWeight: '300',
+        lineHeight: fontSize.giant,
+        textAlign: 'center',
+        marginTop: 1,
     },
     filtersContainerMain: {
         flexDirection: 'row',
@@ -626,5 +805,136 @@ const styles = StyleSheet.create({
     },
     filterButtonMainTextActive: {
         color: colors.textWhite,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        marginHorizontal: spacing.xl,
+        marginTop: -spacing.xxl,
+        marginBottom: spacing.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+        borderRadius: borderRadius.lg,
+        ...shadows.medium,
+    },
+    searchIcon: {
+        fontSize: fontSize.xl,
+        marginRight: spacing.sm,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: fontSize.base,
+        color: colors.text,
+        padding: 0,
+    },
+    clearButton: {
+        padding: spacing.xs,
+        marginLeft: spacing.sm,
+    },
+    clearButtonText: {
+        fontSize: fontSize.xl,
+        color: colors.textLight,
+        fontWeight: fontWeight.light,
+    },
+    sortContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.xl,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    sortLabel: {
+        fontSize: fontSize.sm,
+        color: colors.textLight,
+        fontWeight: fontWeight.medium,
+    },
+    sortButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    sortButtonText: {
+        fontSize: fontSize.sm,
+        color: colors.text,
+        fontWeight: fontWeight.semibold,
+    },
+    sortDropdown: {
+        position: 'absolute',
+        top: 50,
+        right: spacing.xl,
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        ...shadows.large,
+        zIndex: 1000,
+        minWidth: 150,
+    },
+    sortOption: {
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderLight,
+    },
+    sortOptionActive: {
+        backgroundColor: colors.primaryBg,
+    },
+    sortOptionText: {
+        fontSize: fontSize.sm,
+        color: colors.text,
+        fontWeight: fontWeight.medium,
+    },
+    sortOptionTextActive: {
+        color: colors.primary,
+        fontWeight: fontWeight.bold,
+    },
+    statsContainer: {
+        backgroundColor: colors.surface,
+        margin: spacing.xl,
+        marginBottom: spacing.md,
+        padding: spacing.lg,
+        borderRadius: borderRadius.xl,
+        ...shadows.medium,
+    },
+    statsTitle: {
+        fontSize: fontSize.lg,
+        fontWeight: fontWeight.bold,
+        color: colors.text,
+        marginBottom: spacing.lg,
+    },
+    statsGrid: {
+        gap: spacing.md,
+    },
+    statCard: {
+        backgroundColor: colors.background,
+        padding: spacing.lg,
+        borderRadius: borderRadius.md,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.primary,
+    },
+    statLabel: {
+        fontSize: fontSize.xs,
+        color: colors.textLight,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: spacing.xs,
+    },
+    statValue: {
+        fontSize: fontSize.xxl,
+        fontWeight: fontWeight.bold,
+        color: colors.primary,
+        marginBottom: spacing.xs,
+    },
+    statSubtext: {
+        fontSize: fontSize.sm,
+        color: colors.textLight,
     },
 });

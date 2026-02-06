@@ -15,7 +15,7 @@ export const expenseService = {
         }
     },
 
-    // Criar nova despesa
+    // Criar despesa
     create: async (expense) => {
         try {
             const response = await axios.post(API_URL, expense);
@@ -43,6 +43,67 @@ export const expenseService = {
             return response.data;
         } catch (error) {
             console.error('Erro ao atualizar despesa:', error);
+            throw error;
+        }
+    },
+};
+
+export const subscriptionService = {
+    getAll: async () => {
+        try {
+            const response = await axios.get(API_URL.replace('/expenses', '/subscriptions'));
+            return response.data;
+        } catch (error) {
+            console.error('Erro ao buscar subscriptions:', error);
+            throw error;
+        }
+    },
+
+    create: async (subscription) => {
+        try {
+            const response = await axios.post(API_URL.replace('/expenses', '/subscriptions'), subscription);
+            return response.data;
+        } catch (error) {
+            console.error('Erro ao criar subscription:', error);
+            throw error;
+        }
+    },
+
+    update: async (id, subscription) => {
+        try {
+            const response = await axios.put(`${API_URL.replace('/expenses', '/subscriptions')}/${id}`, subscription);
+            return response.data;
+        } catch (error) {
+            console.error('Erro ao atualizar subscription:', error);
+            throw error;
+        }
+    },
+
+    delete: async (id) => {
+        try {
+            await axios.delete(`${API_URL.replace('/expenses', '/subscriptions')}/${id}`);
+        } catch (error) {
+            console.error('Erro ao deletar subscription:', error);
+            throw error;
+        }
+    },
+
+    toggle: async (id) => {
+        try {
+            const response = await axios.patch(`${API_URL.replace('/expenses', '/subscriptions')}/${id}/toggle`);
+            return response.data;
+        } catch (error) {
+            console.error('Erro ao toggle subscription:', error);
+            throw error;
+        }
+    },
+
+    processNow: async () => {
+        try {
+            const response = await axios.post(API_URL.replace('/expenses', '/subscriptions') + '/process');
+            return response.data;
+        } catch (error) {
+            console.error('Erro ao processar subscriptions:', error);
             throw error;
         }
     },
