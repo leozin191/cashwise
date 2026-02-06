@@ -1,425 +1,315 @@
-# 💰 CashWise - AI-Powered Expense Tracker
+# 💰 CashWise — AI-Powered Personal Finance Manager
 
 ![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen?style=for-the-badge&logo=springboot)
-![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
 ![React Native](https://img.shields.io/badge/React%20Native-0.81-blue?style=for-the-badge&logo=react)
+![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
 ![Expo](https://img.shields.io/badge/Expo-54-black?style=for-the-badge&logo=expo)
 ![AI](https://img.shields.io/badge/AI-Groq%20Llama%203.3-blue?style=for-the-badge&logo=ai)
-![H2](https://img.shields.io/badge/Database-H2-darkblue?style=for-the-badge&logo=database)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-Full-stack expense tracking application with **automatic AI-powered categorization** using Groq's Llama 3.3 model. Available on **Web** (React) and **Mobile** (React Native).
+A full-stack personal finance application with **AI-powered expense categorization**, **automatic subscription management**, and a polished mobile experience. Built with Spring Boot + React Native (Expo).
+
+> 📱 **Current focus: Mobile app (React Native).** The web frontend (React + Vite) was the original prototype and will be updated progressively.
 
 ---
 
-##  Tech Highlights
+## ✨ What Makes This Different
 
-What makes this project stand out:
-
-- 🤖 **Real-time AI Integration**: Automatic expense categorization using Groq's Llama 3.3-70b model
-- 📱 **Multi-Platform**: Web (React) and Mobile (React Native with Expo) apps
-- 🏗️ **Clean Architecture**: Layered design following SOLID principles (Controller → Service → Repository)
-- 🔐 **Security First**: Secure API key management using environment variables
-- 💾 **Persistent Data**: H2 file-based database ensures data survives restarts
-- 🔄 **RESTful Design**: Proper HTTP methods, status codes, and JSON responses
-- 📦 **Bulk Operations**: Create multiple expenses in a single request
-- 🎯 **Smart Filtering**: Advanced queries by date, category, and currency
-- 📊 **Interactive Charts**: Click-to-filter pie chart visualization on both Web and Mobile
-- 🌐 **i18n Support**: Multi-language support (PT-BR/EN) across all platforms
-- ⚡ **Performance Optimized**: Optimized state management, no duplicate calculations, efficient re-renders
+- 🤖 **AI Categorization** — Groq's Llama 3.3-70b automatically categorizes expenses from their description
+- 🔄 **Smart Subscriptions** — Netflix, Spotify, gym — added once, expenses created automatically every month via a scheduled job
+- 📊 **Visual Insights** — Interactive pie chart, monthly evolution, per-category statistics
+- 🎯 **Budget Goals** — Set spending limits per category with real-time progress tracking
+- 🌍 **Multi-Currency** — Live exchange rates, auto-conversion between 8 currencies
+- 🌙 **Dark Mode** — System-wide dark theme across every screen and modal
+- 🌐 **Bilingual** — Full Portuguese/English support with persistent language preference
+- 📱 **Native Feel** — Smooth animations, swipe-to-dismiss modals, pull-to-refresh
 
 ---
 
-##  Features
+## 📱 Features
 
-### Backend (Java + Spring Boot)
--  Complete RESTful API for expense management (CRUD)
--  **AI-powered automatic categorization** using Groq AI (Llama 3.3-70b)
--  Persistent H2 file-based database
--  Advanced filtering (by date, category, currency)
--  Bulk expense creation
--  Secure API key management
--  Internationalization (i18n) with Portuguese translations
+### Expense Management
+- Add, edit, delete expenses with AI-powered auto-categorization
+- 30 categories with custom icons (Revolut-inspired)
+- Expense detail view with full info (date, time added, category, currency)
+- Search and sort expenses (newest, oldest, highest, lowest)
+- Filter by period: This Month, Last 30 Days, All Time
+- Bulk expense creation via API
 
-### Frontend - Web (React + Vite)
--  Interactive pie chart - click categories to filter expenses
--  Real-time AI category suggestions as you type
--  Mobile-first responsive design
--  Floating action button for quick expense creation
--  Category-based filtering
--  Clean, modern UI with Tailwind CSS
--  Live data updates
+### Subscriptions (Auto-Recurring)
+- Create subscriptions (Monthly, Weekly, Yearly)
+- Automatic expense generation via scheduled backend job (runs daily at 00:05)
+- Pause/resume subscriptions with a toggle switch
+- Monthly total displayed in header
+- Option to create current month's expense immediately upon subscription creation
 
-### Frontend - Mobile (React Native + Expo)
--  Native mobile app for iOS and Android
--  Bottom tab navigation (Home, Add Expense)
--  Expense list with pie chart visualization
--  Interactive category modal with details
--  Real-time AI category suggestions
--  Pull-to-refresh for data updates
--  Expense creation, editing, and deletion
--  Multi-language support (PT/EN)
--  Responsive UI with custom theme system
--  Environment configuration for API endpoints
+### Budget Goals
+- Set monthly spending limits per category
+- Visual progress bars with color-coded warnings (green → yellow → red)
+- Subscription expenses automatically count toward budget limits
+
+### Analytics & Charts
+- Interactive pie chart — tap a category to see detailed expenses
+- Monthly evolution line chart (last 6 months)
+- Statistics: highest expense, daily average, top category
+
+### Settings & Preferences
+- Dark/Light theme (persisted)
+- Language: Portuguese/English (persisted)
+- Currency selection with live exchange rates
+- Manual exchange rate refresh
+
+### UX Polish
+- Animated splash screen
+- Cascading fade-in animations on content load
+- Swipe-to-dismiss on expense detail modal
+- Long-press to delete, tap to view details
+- Text truncation for long descriptions
 
 ---
 
-##  Tech Stack
+## 🏗️ Tech Stack
 
 ### Backend
-- **Language:** Java 21
-- **Framework:** Spring Boot 4.0
-- **Database:** H2 (file-based persistence)
-- **AI:** Groq AI API (Llama 3.3-70b-versatile)
-- **Build Tool:** Maven
-- **ORM:** Spring Data JPA / Hibernate
+| Tech | Purpose |
+|------|---------|
+| Java 21 | Language |
+| Spring Boot 4.0 | Framework |
+| Spring Data JPA | ORM |
+| H2 Database | File-based persistent storage |
+| Spring Scheduler | Automatic subscription processing |
+| Groq AI API | Llama 3.3-70b for categorization |
+| Maven | Build tool |
 
-### Frontend - Web
-- **Library:** React 19
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS
-- **Charts:** Recharts
-- **HTTP Client:** Axios
+### Mobile (Active Development)
+| Tech | Purpose |
+|------|---------|
+| React Native 0.81 | Cross-platform mobile framework |
+| Expo SDK 54 | Development platform |
+| React Navigation | Bottom tab navigation |
+| react-native-chart-kit | Pie chart & line chart |
+| AsyncStorage | Local preferences persistence |
+| Axios | HTTP client |
+| Context API | State management (Theme, Language, Currency) |
 
-### Frontend - Mobile
-- **Framework:** React Native 0.81
-- **Platform:** Expo 54
-- **Charts:** react-native-chart-kit
-- **Navigation:** React Navigation (Bottom Tabs)
-- **HTTP Client:** Axios
-- **State Management:** Context API
-
----
-
-##  How AI Categorization Works
-
-The system uses **Groq AI** to intelligently categorize expenses based on their description.
-
-### Workflow:
-
-1. **User creates expense** without specifying a category (or while typing)
-2. **System detects** missing category field
-3. **AI analyzes** the expense description using Llama 3.3-70b
-4. **Category is suggested** in real-time based on contextual understanding
-5. **User can accept or modify** the suggestion
-6. **Expense is saved** with the chosen category
-
-### Supported Categories:
-
-| Category | Examples | Emoji |
-|----------|----------|-------|
-| Alimentação | Restaurants, cafes, groceries, food delivery | 🍔 |
-| Transporte | Uber, taxi, bus, metro, gas | 🚗 |
-| Moradia | Rent, utilities, maintenance | 🏠 |
-| Lazer | Netflix, games, movies, concerts | 🎮 |
-| Saúde | Pharmacy, doctor, gym | 💊 |
-| Educação | Books, courses, tuition | 📚 |
-| Compras | Clothing, electronics, shopping | 🛍️ |
-| Outros | Anything that doesn't fit above | 💰 |
-
-### Example:
-
-**Request:**
-```json
-POST /api/expenses
-{
-  "description": "Coffee at Starbucks",
-  "amount": 5.50,
-  "currency": "EUR",
-  "date": "2026-01-28"
-}
-```
-
-**Response:**
-```json
-{
-  "id": 1,
-  "description": "Coffee at Starbucks",
-  "amount": 5.50,
-  "currency": "EUR",
-  "date": "2026-01-28",
-  "category": "Alimentação"
-}
-```
-
- **Category automatically suggested by AI and translated to Portuguese!**
+### Web Frontend (Legacy Prototype)
+| Tech | Purpose |
+|------|---------|
+| React 19 | UI library |
+| Vite | Build tool |
+| Tailwind CSS | Styling |
+| Recharts | Charts |
+| Axios | HTTP client |
 
 ---
 
 ## 📋 API Endpoints
 
+### Expenses
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/expenses` | Create expense (auto-categorizes if empty) |
-| POST | `/api/expenses/bulk` | Create multiple expenses |
-| GET | `/api/expenses` | List all expenses |
-| GET | `/api/expenses/{id}` | Get expense by ID |
-| PUT | `/api/expenses/{id}` | Update expense |
-| DELETE | `/api/expenses/{id}` | Delete expense |
-| GET | `/api/expenses/suggest-category?description=X` | Get AI category suggestion (real-time) |
-| GET | `/api/expenses/category/{category}` | Filter by category |
-| GET | `/api/expenses/date/{date}` | Filter by specific date |
-| GET | `/api/expenses/date-range?start=X&end=Y` | Filter by date range |
-| GET | `/api/expenses/currency/{currency}` | Filter by currency |
+| `GET` | `/api/expenses` | List all expenses |
+| `GET` | `/api/expenses/{id}` | Get expense by ID |
+| `POST` | `/api/expenses` | Create expense (AI auto-categorizes if no category) |
+| `PUT` | `/api/expenses/{id}` | Update expense |
+| `DELETE` | `/api/expenses/{id}` | Delete expense |
+| `POST` | `/api/expenses/bulk` | Create multiple expenses |
+| `GET` | `/api/expenses/suggest-category?description=X` | Get AI category suggestion |
+| `GET` | `/api/expenses/category/{category}` | Filter by category |
+| `GET` | `/api/expenses/date/{date}` | Filter by date |
+| `GET` | `/api/expenses/date-range?start=X&end=Y` | Filter by date range |
+| `GET` | `/api/expenses/currency/{currency}` | Filter by currency |
+
+### Subscriptions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/subscriptions` | List all subscriptions |
+| `GET` | `/api/subscriptions/active` | List active subscriptions only |
+| `POST` | `/api/subscriptions` | Create subscription |
+| `PUT` | `/api/subscriptions/{id}` | Update subscription |
+| `DELETE` | `/api/subscriptions/{id}` | Delete subscription |
+| `PATCH` | `/api/subscriptions/{id}/toggle` | Pause/resume subscription |
+| `POST` | `/api/subscriptions/process` | Manually trigger subscription processing |
 
 ---
 
-##  How to Run
+## 🚀 Getting Started
 
 ### Prerequisites
 - Java 21+
 - Node.js 18+
 - Maven
-- Expo CLI (for mobile): `npm install -g expo-cli`
+- Expo Go app on your phone
 - Groq API Key (free at https://console.groq.com)
 
----
-
-### Backend Setup
-
-**1. Clone the repository**
+### 1. Clone the repository
 ```bash
-git clone https://github.com/leozin191/cashwise.git
-cd cashwise
+git clone https://github.com/leozara/CashWise.git
+cd CashWise
 ```
 
-**2. Configure Groq API Key**
-
-Create `src/main/resources/application-local.properties`:
-```properties
-groq.api.key=your_groq_api_key_here
-```
-
-**3. Run the backend**
+### 2. Backend Setup
 ```bash
+# Set your Groq API key
+export GROQ_API_KEY=your_key_here
+
+# Or create a .env file (not committed to git)
+echo "GROQ_API_KEY=your_key_here" > .env
+
+# Run the backend
 ./mvnw spring-boot:run
 ```
+The API will be available at `http://localhost:8080`.
 
-**4. Access**
-- API: `http://localhost:8080/api/expenses`
-- H2 Console: `http://localhost:8080/h2-console`
-  - JDBC URL: `jdbc:h2:file:./data/cashwise`
-  - Username: `sa`
-  - Password: (leave empty)
-
----
-
-### Frontend Setup
-
-**1. Navigate to frontend folder**
-```bash
-cd frontend
-```
-
-**2. Install dependencies**
-```bash
-npm install
-```
-
-**3. (Optional) Configure custom API URL**
-
-Create `frontend/.env.local`:
-```
-VITE_API_URL=http://localhost:8080/api/expenses
-```
-
-**4. Run the frontend**
-```bash
-npm run dev
-```
-
-**5. Access**
-- Frontend: `http://localhost:5173`
-
----
-
-### Mobile Setup
-
-**1. Navigate to mobile folder**
+### 3. Mobile Setup
 ```bash
 cd mobile
-```
 
-**2. Install dependencies**
-```bash
+# Install dependencies
 npm install
-```
 
-**3. (Optional) Configure custom API URL**
+# Configure the API URL
+cp .env.example .env
+# Edit .env and set your computer's local IP:
+# EXPO_PUBLIC_API_URL=http://YOUR_IP:8080/api/expenses
 
-Create `mobile/.env`:
-```
-EXPO_PUBLIC_API_URL=http://localhost:8080/api/expenses
-```
-
-For local network testing, use your machine's IP:
-```
-EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080/api/expenses
-```
-
-**4. Run the mobile app**
-```bash
+# Start Expo
 npx expo start
 ```
+Scan the QR code with Expo Go on your phone.
 
-**5. View on device**
-- Scan QR code with **Expo Go** app on your phone
-
----
-
-##  Mobile Testing (Local Network)
-
-### Backend Configuration:
-
-In `src/main/resources/application.properties`, add:
-```properties
-server.address=0.0.0.0
-```
-
-### Frontend Configuration:
-
-1. Get your local IP: 
-   - Windows: `ipconfig`
-   - Mac/Linux: `ifconfig`
-
-2. Create `frontend/.env.local`:
-```
-VITE_API_URL=http://YOUR_LOCAL_IP:8080/api/expenses
-```
-
-3. Access from mobile device (same WiFi):
-```
-http://YOUR_LOCAL_IP:5173
-```
+> **Important:** Your phone and computer must be on the same Wi-Fi network. Use your local IP (not `localhost`).
 
 ---
 
-##  Project Structure
+## 📁 Project Structure
+
+> **Note:** The current development focus is on the **mobile app**. The web frontend (React + Vite) was the original prototype and will be updated over time.
+
 ```
-cashwise/
-├── src/main/java/com/leozara/cashwise/
-│   ├── controller/          # REST API endpoints
-│   ├── service/             # Business logic + AI integration
+CashWise/
+│
+├── src/main/java/.../cashwise/          # ☕ Spring Boot Backend
+│   ├── config/
+│   │   └── LocaleConfig.java
+│   ├── controller/
+│   │   ├── ExpenseController.java       # Expense CRUD + AI suggestions
+│   │   └── SubscriptionController.java  # Subscription CRUD + toggle
+│   ├── dto/
+│   │   └── CategorySuggestionResponse.java
+│   ├── model/
+│   │   ├── Expense.java
+│   │   └── Subscription.java
+│   ├── repository/
+│   │   ├── ExpenseRepository.java
+│   │   └── SubscriptionRepository.java
+│   ├── scheduler/
+│   │   └── SubscriptionScheduler.java   # Daily cron job (00:05)
+│   ├── service/
+│   │   ├── AiService.java               # Groq Llama 3.3 integration
+│   │   ├── CategoryTranslationService.java
 │   │   ├── ExpenseService.java
-│   │   ├── AiService.java
-│   │   └── CategoryTranslationService.java
-│   ├── repository/          # Data access layer
-│   ├── model/               # JPA entities
-│   ├── dto/                 # Data transfer objects
-│   └── config/              # Configuration classes
+│   │   └── SubscriptionService.java
+│   └── CashWiseApplication.java
 │
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── ExpenseForm.jsx
-│   │   │   ├── ExpenseCard.jsx
-│   │   │   └── FloatingButton.jsx
-│   │   └── services/        # API integration
-│   │       └── api.js
-│   └── ...
+├── frontend/                            # 🌐 React Web App (Vite + Tailwind)
+│   └── src/                             #    ⚠️ Legacy prototype — will be updated
+│       ├── components/
+│       │   ├── Dashboard.jsx
+│       │   ├── ExpenseCard.jsx
+│       │   ├── ExpenseForm.jsx
+│       │   ├── ExpenseList.jsx
+│       │   └── FloatingButton.jsx
+│       ├── services/
+│       │   └── api.js
+│       ├── App.jsx
+│       └── main.jsx
 │
-├── mobile/
-│   ├── src/
-│   │   ├── components/      # React Native components
-│   │   │   ├── AddExpenseModal.js
-│   │   │   ├── ExpenseCard.js
-│   │   │   └── CategoryLegend.js
-│   │   ├── screens/         # App screens
-│   │   │   ├── HomeScreen.js
-│   │   │   └── AddExpenseScreen.js
-│   │   ├── constants/       # Configuration & themes
-│   │   │   ├── categories.js
-│   │   │   ├── theme.js
-│   │   │   └── translations.js
-│   │   ├── contexts/        # Context API
-│   │   │   └── LanguageContext.js
-│   │   ├── services/        # API integration
-│   │   │   └── api.js
-│   │   └── utils/           # Utility functions
-│   │       └── helpers.js
-│   ├── app.json
-│   └── package.json
+├── mobile/                              # 📱 React Native App (Expo) — Active Development
+│   ├── App.js                           # Entry point + tab navigation
+│   └── src/
+│       ├── components/
+│       │   ├── AddExpenseModal.js        # Create/edit expense form
+│       │   ├── CategoryIcon.js          # SVG category icons
+│       │   ├── CategoryLegend.js        # Pie chart legend
+│       │   ├── CurrencyDisplay.js       # Multi-currency display
+│       │   ├── ExpenseCard.js           # Expense list item
+│       │   ├── ExpenseDetailModal.js    # Detail view (swipe-to-dismiss)
+│       │   ├── FadeIn.js               # Animation wrapper
+│       │   ├── MonthlyChart.js          # Line chart (6 months)
+│       │   └── SplashScreen.js          # Animated splash
+│       ├── constants/
+│       │   ├── categories.js            # 30 categories + icons + colors
+│       │   ├── currencies.js            # 8 supported currencies
+│       │   ├── theme.js                 # Light/dark color tokens
+│       │   └── translations.js          # PT/EN translations
+│       ├── contexts/
+│       │   ├── CurrencyContext.js        # Currency + live exchange rates
+│       │   ├── LanguageContext.js        # i18n (persisted)
+│       │   └── ThemeContext.js           # Dark mode (persisted)
+│       ├── screens/
+│       │   ├── HomeScreen.js            # Dashboard + charts + expenses
+│       │   ├── BudgetsScreen.js         # Budget goals per category
+│       │   ├── SubscriptionsScreen.js   # Recurring expense management
+│       │   └── SettingsScreen.js        # Theme, language, currency
+│       ├── services/
+│       │   ├── api.js                   # Axios client
+│       │   └── currency.js              # Exchange rate fetcher
+│       └── utils/
+│           ├── budgets.js               # AsyncStorage budget persistence
+│           └── helpers.js               # Date formatting, filters, sorting
 │
-└── src/main/resources/
-    ├── messages.properties          # English translations
-    ├── messages_pt_BR.properties    # Portuguese translations
-    └── application.properties
+├── .env.example                         # Backend env template
+├── mobile/.env.example                  # Mobile env template
+└── frontend/.env.example                # Web env template
 ```
 
 ---
 
-## 💡 Why This Project?
+## 🤖 How AI Categorization Works
 
-This project demonstrates:
+1. User creates an expense: `"Coffee at Starbucks"` without selecting a category
+2. Backend sends the description to Groq's Llama 3.3-70b with a structured prompt
+3. AI returns a category from the predefined list of 30 categories
+4. The response is validated against the allowed list (falls back to "General" if invalid)
+5. Expense is saved with the AI-suggested category
 
-- ✅ **Modern Backend Development**: Latest Spring Boot 4.0 with Java 21
-- ✅ **AI/ML Integration**: Practical use of AI APIs in real-world applications
-- ✅ **Full-Stack Skills**: Complete application from database to UI (Web & Mobile)
-- ✅ **Multi-Platform Development**: React for Web, React Native for Mobile
-- ✅ **API Design**: RESTful principles and best practices
-- ✅ **State Management**: Optimized state handling across different platforms
-- ✅ **Problem Solving**: Automating tedious manual categorization tasks
-- ✅ **Production-Ready Code**: Proper error handling, validation, and security
-- ✅ **Mobile-First**: Responsive design optimized for mobile devices
-- ✅ **i18n**: Multi-language support showing enterprise-level features
+**Example:**
+```json
+// POST /api/expenses
+{ "description": "Uber to airport", "amount": 25.00, "currency": "EUR", "date": "2026-02-06" }
 
-Perfect for showcasing in a **developer portfolio** or as a **learning project** for full-stack development with AI integration across multiple platforms.
-
----
-
-##  Future Improvements
-
-### Planned Features:
-- [ ]  Implement JWT authentication for multi-user support
-- [ ]  Add expense editing functionality
-- [ ]  Create advanced analytics dashboard with charts
-- [ ]  Export expenses to CSV/Excel
-- [ ]  Integration with Open Banking APIs (Brazil)
-- [ ]  Add comprehensive unit and integration tests
-- [ ]  Docker containerization
-- [ ]  Deploy to cloud (Vercel + Railway/Heroku)
-- [ ]  Dark mode support
-- [ ]  Monthly/yearly spending reports
-- [ ]  Budget alerts and notifications
-- [ ]  Multi-currency conversion with live rates
-
-### Contributions Welcome!
-Feel free to open issues or submit pull requests for any of these features!
+// Response — category auto-assigned
+{ "id": 1, "description": "Uber to airport", "amount": 25.00, "currency": "EUR", "date": "2026-02-06", "category": "Transport" }
+```
 
 ---
 
-##  Security Notes
+## 🔒 Security Notes
 
-- API keys are stored in `application-local.properties` (not committed to Git)
-- Frontend uses environment variables for API configuration
-- CORS is configured for development (should be restricted in production)
-- H2 console is enabled for development (should be disabled in production)
-
----
-
-##  Author
-
-**Developed in Dublin, IE 🇮🇪**
-
-Built as a learning project to demonstrate full-stack development with AI integration.
+- API keys are loaded from environment variables (`${GROQ_API_KEY}`), never hardcoded
+- `.env` files are excluded from version control via `.gitignore`
+- H2 console and debug settings are enabled for development only
+- CORS is open (`*`) for development — restrict in production
+- Database files (`/data/`) are excluded from version control
 
 ---
 
-##  License
+## 🛣️ Roadmap
 
-This project is open source and available under the [MIT License](LICENSE).
+- [ ] Backup & Restore (export/import data)
+- [ ] Income tracking + monthly balance
+- [ ] Push notifications for budget alerts
+- [ ] Receipt scanner (camera → AI extraction)
+- [ ] PDF monthly report export
+- [ ] JWT authentication
+- [ ] Custom categories
+- [ ] Week-over-week comparison
+- [ ] AI spending insights
 
 ---
 
-##  Acknowledgments
+## 📄 License
 
-- **Groq** for providing free AI API access
-- **Spring Boot** team for the excellent framework
-- **React** and **Vite** teams for modern frontend tooling
-- **Tailwind CSS** for utility-first styling
-
----
-
-**⭐ If you found this project helpful, please consider giving it a star!**
+MIT License — see [LICENSE](LICENSE) for details.
