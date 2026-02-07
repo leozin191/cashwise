@@ -3,10 +3,14 @@
 // ========================================
 export const colors = {
     // Primárias
-    primary: '#6366F1',
+    primary: '#4F46E5',
     primaryLight: '#818CF8',
-    primaryDark: '#4F46E5',
-    primaryBg: 'rgba(99, 102, 241, 0.15)', // Para fundos transparentes
+    primaryDark: '#3730A3',
+    primaryBg: 'rgba(79, 70, 229, 0.12)',
+
+    // Gradientes
+    primaryGradientStart: '#6366F1',
+    primaryGradientEnd: '#4F46E5',
 
     // Secundárias
     secondary: '#EC4899',
@@ -102,6 +106,31 @@ export const fontWeight = {
 };
 
 // ========================================
+// FONT FAMILIES (Inter)
+// ========================================
+export const fontFamily = {
+    regular: 'Inter_400Regular',
+    medium: 'Inter_500Medium',
+    semibold: 'Inter_600SemiBold',
+    bold: 'Inter_700Bold',
+};
+
+// ========================================
+// TYPOGRAPHY (combos prontos)
+// ========================================
+export const typography = {
+    h1: { fontFamily: fontFamily.bold, fontSize: fontSize.xxxl },
+    h2: { fontFamily: fontFamily.bold, fontSize: fontSize.xxl },
+    h3: { fontFamily: fontFamily.semibold, fontSize: fontSize.xl },
+    body: { fontFamily: fontFamily.regular, fontSize: fontSize.base },
+    bodyMedium: { fontFamily: fontFamily.medium, fontSize: fontSize.base },
+    bodySemibold: { fontFamily: fontFamily.semibold, fontSize: fontSize.base },
+    caption: { fontFamily: fontFamily.regular, fontSize: fontSize.sm },
+    captionMedium: { fontFamily: fontFamily.medium, fontSize: fontSize.sm },
+    label: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+};
+
+// ========================================
 // SOMBRAS
 // ========================================
 export const shadows = {
@@ -135,7 +164,7 @@ export const shadows = {
     },
     colored: {
         // Para botões coloridos (ex: botão +)
-        shadowColor: colors.primary,
+        shadowColor: '#4F46E5',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
@@ -185,6 +214,10 @@ export const darkColors = {
     primaryLight: '#A5B4FC',
     primaryDark: '#6366F1',
     primaryBg: 'rgba(129, 140, 248, 0.15)',
+
+    // Gradientes
+    primaryGradientStart: '#818CF8',
+    primaryGradientEnd: '#6366F1',
 
     // Secundárias
     secondary: '#F472B6',

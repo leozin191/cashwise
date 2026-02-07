@@ -14,12 +14,13 @@ import {
     Platform,
     RefreshControl,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
-import { Ionicons } from '@expo/vector-icons';
 import CategoryIcon from '../components/CategoryIcon';
 import { getBudgets, saveBudget, deleteBudget, calculateProgress, getAlertLevel } from '../utils/budgets';
 import currencyService from '../services/currency';
@@ -98,7 +99,7 @@ export default function BudgetsScreen() {
         const success = await saveBudget(selectedCategory, parseFloat(limitValue), currency);
 
         if (success) {
-            Alert.alert('✅', t('budgetSaved'));
+            Alert.alert(t('success'), t('budgetSaved'));
             setShowModal(false);
             setSelectedCategory('');
             setLimitValue('');
@@ -117,7 +118,7 @@ export default function BudgetsScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         await deleteBudget(category);
-                        Alert.alert('✅', t('budgetDeleted'));
+                        Alert.alert(t('success'), t('budgetDeleted'));
                         loadData();
                     },
                 },
@@ -135,9 +136,14 @@ export default function BudgetsScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>🎯 {t('budgetGoals')}</Text>
-            </View>
+            <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <Text style={styles.headerTitle}>{t('budgetGoals')}</Text>
+            </LinearGradient>
 
             <ScrollView
                 style={styles.content}
@@ -152,7 +158,7 @@ export default function BudgetsScreen() {
             >
                 {Object.keys(budgets).length === 0 ? (
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>🎯</Text>
+                        <Ionicons name="flag-outline" size={64} color={colors.textLight} />
                         <Text style={styles.emptyText}>{t('noBudgets')}</Text>
                         <Text style={styles.emptySubtext}>{t('addBudgetHint')}</Text>
                     </View>
@@ -305,7 +311,10 @@ export default function BudgetsScreen() {
                                     </View>
 
                                     <TouchableOpacity style={styles.saveButton} onPress={handleSaveBudget}>
-                                        <Text style={styles.saveButtonText}>💾 {t('save')}</Text>
+                                        <View style={styles.saveButtonContent}>
+                                            <Ionicons name="save-outline" size={20} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
+                                            <Text style={styles.saveButtonText}>{t('save')}</Text>
+                                        </View>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -324,7 +333,6 @@ const createStyles = (colors) =>
             backgroundColor: colors.background,
         },
         header: {
-            backgroundColor: colors.primary,
             paddingTop: 60,
             paddingBottom: spacing.xl,
             paddingHorizontal: spacing.xl,
@@ -333,7 +341,7 @@ const createStyles = (colors) =>
         },
         headerTitle: {
             fontSize: fontSize.xxxl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.textWhite,
         },
         content: {
@@ -344,18 +352,16 @@ const createStyles = (colors) =>
             alignItems: 'center',
             paddingVertical: spacing.xxxl * 2,
         },
-        emptyEmoji: {
-            fontSize: 64,
-            marginBottom: spacing.lg,
-        },
         emptyText: {
             fontSize: fontSize.xl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.text,
             marginBottom: spacing.sm,
+            marginTop: spacing.lg,
         },
         emptySubtext: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.textLight,
             textAlign: 'center',
         },
@@ -379,7 +385,7 @@ const createStyles = (colors) =>
         },
         budgetCategory: {
             fontSize: fontSize.lg,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.text,
             marginLeft: spacing.sm,
         },
@@ -390,7 +396,7 @@ const createStyles = (colors) =>
         },
         budgetLimit: {
             fontSize: fontSize.xl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.primary,
         },
         budgetPercentageBadge: {
@@ -400,7 +406,7 @@ const createStyles = (colors) =>
         },
         budgetPercentageText: {
             fontSize: fontSize.lg,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
         },
         progressBarBg: {
             height: 10,
@@ -419,10 +425,12 @@ const createStyles = (colors) =>
         },
         budgetSpent: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.textLight,
         },
         budgetRemaining: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.textLight,
         },
         addButton: {
@@ -439,7 +447,7 @@ const createStyles = (colors) =>
         },
         addButtonText: {
             fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.primary,
             marginLeft: spacing.sm,
         },
@@ -464,7 +472,7 @@ const createStyles = (colors) =>
         },
         modalTitle: {
             fontSize: fontSize.xxl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.text,
         },
         closeButton: {
@@ -477,7 +485,7 @@ const createStyles = (colors) =>
         },
         label: {
             fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.text,
             marginBottom: spacing.sm,
             marginTop: spacing.lg,
@@ -502,6 +510,7 @@ const createStyles = (colors) =>
         },
         categoryOptionText: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.text,
             marginLeft: spacing.xs,
         },
@@ -516,7 +525,7 @@ const createStyles = (colors) =>
         },
         currencySymbol: {
             fontSize: fontSize.xl,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.primary,
             marginRight: spacing.sm,
         },
@@ -524,7 +533,7 @@ const createStyles = (colors) =>
             flex: 1,
             padding: spacing.lg,
             fontSize: fontSize.xl,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.text,
         },
         saveButton: {
@@ -535,9 +544,13 @@ const createStyles = (colors) =>
             marginTop: spacing.xl,
             ...shadows.colored,
         },
+        saveButtonContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
         saveButtonText: {
             color: colors.textWhite,
             fontSize: fontSize.lg,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
         },
     });

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { getCategoryColor } from '../constants/categories';
 import { calculatePercentage } from '../utils/helpers';
-import { spacing, borderRadius, fontSize, fontWeight } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontFamily } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import CurrencyDisplay from './CurrencyDisplay';
@@ -60,7 +60,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     name: {
         fontSize: fontSize.base,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
     },
     right: {
@@ -68,12 +68,13 @@ const createStyles = (colors) => StyleSheet.create({
     },
     amount: {
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
         marginBottom: 2,
     },
     percent: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
 });

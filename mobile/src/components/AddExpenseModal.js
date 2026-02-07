@@ -9,10 +9,11 @@ import {
     TextInput,
     Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { expenseService } from '../services/api';
 import { CATEGORIES, getCategoryEmoji, getCategoryColor } from '../constants/categories';
 import { CURRENCIES } from '../constants/currencies';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getBudgets, calculateProgress, getAlertLevel } from '../utils/budgets';
@@ -49,13 +50,11 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             const budgets = await getBudgets();
             const expenseCategory = expense.category;
 
-            if (!budgets[expenseCategory]) return; // Sem meta para esta categoria
+            if (!budgets[expenseCategory]) return;
 
-            // Pega todas as despesas do mês
             const allExpenses = await expenseService.getAll();
             const thisMonth = filterByThisMonth(allExpenses);
 
-            // Calcula total da categoria
             const categoryTotal = thisMonth
                 .filter(exp => exp.category === expenseCategory)
                 .reduce((sum, exp) => sum + exp.amount, 0);
@@ -64,11 +63,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             const progress = calculateProgress(categoryTotal, budget.limit);
             const level = getAlertLevel(progress);
 
-            // Alerta se passou de 80%
             if (level === 'warning') {
                 setTimeout(() => {
                     Alert.alert(
-                        `⚠️ ${t('budgetWarning')} ${progress.toFixed(0)}%`,
+                        `${t('budgetWarning')} ${progress.toFixed(0)}%`,
                         `${t(`categories.${expenseCategory}`)}: €${categoryTotal.toFixed(2)} de €${budget.limit.toFixed(0)}`,
                         [{ text: 'OK' }]
                     );
@@ -76,7 +74,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             } else if (level === 'critical') {
                 setTimeout(() => {
                     Alert.alert(
-                        `🚨 ${t('budgetCritical')}`,
+                        t('budgetCritical'),
                         `${t(`categories.${expenseCategory}`)}: €${categoryTotal.toFixed(2)} de €${budget.limit.toFixed(0)}`,
                         [{ text: 'OK' }]
                     );
@@ -109,23 +107,22 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
 
             if (expenseToEdit) {
                 await expenseService.update(expenseToEdit.id, expenseData);
-                Alert.alert(`✅ ${t('success')}`, t('expenseUpdated'), [
+                Alert.alert(t('success'), t('expenseUpdated'), [
                     { text: 'OK', onPress: handleClose }
                 ]);
             } else {
                 const result = await expenseService.create(expenseData);
 
-                // Verifica metas de gastos
                 await checkBudgetAlert(result);
 
                 if (!category && result.category) {
                     Alert.alert(
-                        `✨ ${t('success')}`,
+                        t('success'),
                         `${t('expenseAdded')}\n${t('aiCategorized')} ${t(`categories.${result.category}`)}`,
                         [{ text: 'OK', onPress: handleClose }]
                     );
                 } else {
-                    Alert.alert(`✅ ${t('success')}`, t('expenseAdded'), [
+                    Alert.alert(t('success'), t('expenseAdded'), [
                         { text: 'OK', onPress: handleClose }
                     ]);
                 }
@@ -172,7 +169,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                     <ScrollView style={styles.content}>
                         {/* Banner da IA */}
                         <View style={styles.aiBanner}>
-                            <Text style={styles.aiBannerEmoji}>✨</Text>
+                            <Ionicons name="flash-outline" size={24} color={colors.primary} style={{ marginRight: spacing.md }} />
                             <Text style={styles.aiBannerText}>
                                 {t('aiBanner')}
                             </Text>
@@ -254,9 +251,12 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                             onPress={() => setShowAdvanced(!showAdvanced)}
                             activeOpacity={0.7}
                         >
-                            <Text style={styles.advancedToggleText}>
-                                ⚙️ Opções avançadas
-                            </Text>
+                            <View style={styles.advancedToggleContent}>
+                                <Ionicons name="settings-outline" size={18} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                                <Text style={styles.advancedToggleText}>
+                                    {t('advancedOptions') || 'Advanced options'}
+                                </Text>
+                            </View>
                             <Text style={styles.advancedToggleArrow}>
                                 {showAdvanced ? '▲' : '▼'}
                             </Text>
@@ -267,7 +267,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                             <View style={styles.advancedSection}>
                                 {/* Moeda */}
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.label}>💱 {t('currency')}</Text>
+                                    <View style={styles.currencyLabelRow}>
+                                        <Ionicons name="swap-horizontal-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                                        <Text style={styles.label}>{t('currency')}</Text>
+                                    </View>
                                     <TouchableOpacity
                                         style={styles.currencySelector}
                                         onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
@@ -304,9 +307,12 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
 
                                 {/* Informação sobre moeda padrão */}
                                 <View style={styles.infoBox}>
-                                    <Text style={styles.infoText}>
-                                        ℹ️ Por padrão, despesas são salvas em {CURRENCIES.find(c => c.code === currency)?.flag} {currency}
-                                    </Text>
+                                    <View style={styles.infoBoxContent}>
+                                        <Ionicons name="information-circle-outline" size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+                                        <Text style={styles.infoText}>
+                                            {t('defaultCurrencyInfo') || `Default currency: ${CURRENCIES.find(c => c.code === currency)?.flag} ${currency}`}
+                                        </Text>
+                                    </View>
                                 </View>
                             </View>
                         )}
@@ -318,14 +324,22 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                             disabled={saving}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.saveButtonText}>
-                                {saving
-                                    ? t('saving')
-                                    : expenseToEdit
-                                        ? `💾 ${t('saveChanges')}`
-                                        : `✨ ${t('addExpense')}`
-                                }
-                            </Text>
+                            <View style={styles.saveButtonContent}>
+                                <Ionicons
+                                    name={expenseToEdit ? 'save-outline' : 'add-circle-outline'}
+                                    size={22}
+                                    color={colors.textWhite}
+                                    style={{ marginRight: spacing.sm }}
+                                />
+                                <Text style={styles.saveButtonText}>
+                                    {saving
+                                        ? t('saving')
+                                        : expenseToEdit
+                                            ? t('saveChanges')
+                                            : t('addExpense')
+                                    }
+                                </Text>
+                            </View>
                         </TouchableOpacity>
                         {/* Espaço extra quando avançado está aberto */}
                         {showAdvanced && showCurrencyPicker && (
@@ -360,7 +374,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     title: {
         fontSize: fontSize.xxxl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
     },
     closeButton: {
@@ -379,13 +393,10 @@ const createStyles = (colors) => StyleSheet.create({
         marginBottom: spacing.xxl,
         alignItems: 'center',
     },
-    aiBannerEmoji: {
-        fontSize: fontSize.xxxl,
-        marginRight: spacing.md,
-    },
     aiBannerText: {
         flex: 1,
         fontSize: fontSize.sm + 1,
+        fontFamily: fontFamily.regular,
         color: colors.primary,
         lineHeight: 18,
     },
@@ -394,7 +405,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     label: {
         fontSize: fontSize.base,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
         marginBottom: spacing.sm,
     },
@@ -405,6 +416,7 @@ const createStyles = (colors) => StyleSheet.create({
         borderRadius: borderRadius.md,
         padding: spacing.lg,
         fontSize: fontSize.lg,
+        fontFamily: fontFamily.regular,
         color: colors.text,
     },
     amountContainer: {
@@ -418,7 +430,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     currencySymbol: {
         fontSize: fontSize.xl + 2,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.primary,
         marginRight: spacing.sm,
     },
@@ -426,7 +438,7 @@ const createStyles = (colors) => StyleSheet.create({
         flex: 1,
         padding: spacing.lg,
         fontSize: fontSize.xl + 2,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
     },
     categoriesGrid: {
@@ -458,12 +470,12 @@ const createStyles = (colors) => StyleSheet.create({
     },
     categoryText: {
         fontSize: fontSize.sm + 1,
+        fontFamily: fontFamily.medium,
         color: colors.textLight,
-        fontWeight: fontWeight.medium,
     },
     categoryTextSelected: {
         color: colors.textWhite,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
     },
     saveButton: {
         backgroundColor: colors.primary,
@@ -477,10 +489,19 @@ const createStyles = (colors) => StyleSheet.create({
     saveButtonDisabled: {
         opacity: 0.6,
     },
+    saveButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     saveButtonText: {
         color: colors.textWhite,
         fontSize: fontSize.xl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
+    },
+    currencyLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.sm,
     },
     currencySelector: {
         backgroundColor: colors.background,
@@ -494,8 +515,8 @@ const createStyles = (colors) => StyleSheet.create({
     },
     currencySelectorText: {
         fontSize: fontSize.lg,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
-        fontWeight: fontWeight.semibold,
     },
     currencySelectorArrow: {
         fontSize: fontSize.sm,
@@ -526,6 +547,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     currencyOptionText: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.text,
     },
     advancedToggle: {
@@ -539,9 +561,13 @@ const createStyles = (colors) => StyleSheet.create({
         padding: spacing.lg,
         marginBottom: spacing.lg,
     },
+    advancedToggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     advancedToggleText: {
         fontSize: fontSize.base,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.textLight,
     },
     advancedToggleArrow: {
@@ -563,8 +589,14 @@ const createStyles = (colors) => StyleSheet.create({
         borderLeftWidth: 3,
         borderLeftColor: colors.primary,
     },
+    infoBoxContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     infoText: {
+        flex: 1,
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.primary,
         lineHeight: 18,
     },

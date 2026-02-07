@@ -9,9 +9,14 @@ import {
     Alert,
     Modal,
     TextInput,
+    ActivityIndicator,
 } from 'react-native';
 
 import { PieChart } from 'react-native-chart-kit';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+
+import { SwipeListView } from 'react-native-swipe-list-view';
 
 import { expenseService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
@@ -21,7 +26,7 @@ import AddExpenseModal from '../components/AddExpenseModal';
 
 import { CATEGORY_COLORS, normalizeCategory } from '../constants/categories';
 import { getCurrencyByCode } from '../constants/currencies';
-import { spacing, borderRadius, fontSize, fontWeight, shadows, sizes } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows, sizes } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -87,7 +92,7 @@ export default function HomeScreen() {
         try {
             await expenseService.delete(id);
             loadExpenses();
-            Alert.alert(`✅ ${t('deleted')}`, t('expenseDeleted'));
+            Alert.alert(t('deleted'), t('expenseDeleted'));
         } catch (error) {
             Alert.alert(t('error'), t('couldNotDelete'));
         }
@@ -194,7 +199,8 @@ export default function HomeScreen() {
     if (loading) {
         return (
             <View style={styles.centerContainer}>
-                <Text style={styles.loadingText}>{t('loading')} ⏳</Text>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>{t('loading')}</Text>
             </View>
         );
     }
@@ -202,8 +208,16 @@ export default function HomeScreen() {
     return (
         <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>💰 {t('appName')}</Text>
+            <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <View style={styles.headerTitleRow}>
+                    <Ionicons name="wallet-outline" size={24} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
+                    <Text style={styles.headerTitle}>{t('appName')}</Text>
+                </View>
 
                 <View style={styles.headerStats}>
                     <View>
@@ -219,10 +233,10 @@ export default function HomeScreen() {
                         <Text style={styles.headerCount}>{filteredExpenses.length}</Text>
                     </View>
                 </View>
-            </View>
+            </LinearGradient>
             {/* Campo de Busca */}
             <View style={styles.searchContainer}>
-                <Text style={styles.searchIcon}>🔍</Text>
+                <Ionicons name="search-outline" size={20} color={colors.textLight} style={{ marginRight: spacing.sm }} />
                 <TextInput
                     style={styles.searchInput}
                     placeholder={t('searchExpenses')}
@@ -236,7 +250,7 @@ export default function HomeScreen() {
                         onPress={() => setSearchQuery('')}
                         style={styles.clearButton}
                     >
-                        <Text style={styles.clearButtonText}>✕</Text>
+                        <Ionicons name="close-circle" size={20} color={colors.textLight} />
                     </TouchableOpacity>
                 )}
             </View>
@@ -249,7 +263,7 @@ export default function HomeScreen() {
                 {expenses.length === 0 ? (
                     // Realmente vazio (sem despesas no banco)
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>📭</Text>
+                        <Ionicons name="mail-open-outline" size={64} color={colors.textLight} />
                         <Text style={styles.emptyText}>{t('noExpenses')}</Text>
                         <Text style={styles.emptySubtext}>{t('noExpensesSubtext')}</Text>
                     </View>
@@ -257,7 +271,7 @@ export default function HomeScreen() {
                     // Tem despesas, mas filtro não encontrou nada
                     <View style={styles.chartSection}>
                         <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>🔍</Text>
+                            <Ionicons name="search-outline" size={64} color={colors.textLight} />
                             <Text style={styles.emptyText}>
                                 {searchQuery.trim()
                                     ? t('noResultsFound')
@@ -313,7 +327,10 @@ export default function HomeScreen() {
                         {filteredChartData.length > 0 && (
                             <FadeIn delay={100}>
                                 <View style={styles.chartContainer}>
-                                    <Text style={styles.chartTitle}>📊 {t('chartTitle')}</Text>
+                                    <View style={styles.chartTitleRow}>
+                                        <Ionicons name="pie-chart-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                                        <Text style={styles.chartTitle}>{t('chartTitle')}</Text>
+                                    </View>
                                 <View style={styles.pieWrapper}>
                                     <PieChart
                                         data={filteredChartData}
@@ -368,15 +385,17 @@ export default function HomeScreen() {
                         </View>
 
                         {/* Estatísticas */}
-                        {/* Estatísticas */}
                         <FadeIn delay={300}>
                             <View style={styles.statsContainer}>
-                            <Text style={styles.statsTitle}>📊 {t('statistics')}</Text>
+                            <View style={styles.statsTitleRow}>
+                                <Ionicons name="stats-chart-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                                <Text style={styles.statsTitle}>{t('statistics')}</Text>
+                            </View>
 
                             <View style={styles.statsGrid}>
                                 {/* Maior gasto */}
                                 {highestExpense && (
-                                    <View style={styles.statCard}>
+                                    <View style={[styles.statCard, { borderLeftColor: colors.warning }]}>
                                         <Text style={styles.statLabel}>{t('highestExpense')}</Text>
                                         <CurrencyDisplay
                                             amountInEUR={highestExpense.amount}
@@ -393,7 +412,7 @@ export default function HomeScreen() {
                                 )}
 
                                 {/* Média por dia */}
-                                <View style={styles.statCard}>
+                                <View style={[styles.statCard, { borderLeftColor: colors.primary }]}>
                                     <Text style={styles.statLabel}>{t('averagePerDay')}</Text>
                                     <CurrencyDisplay
                                         amountInEUR={averagePerDay}
@@ -406,7 +425,7 @@ export default function HomeScreen() {
 
                                 {/* Categoria top */}
                                 {topCategory && (
-                                    <View style={styles.statCard}>
+                                    <View style={[styles.statCard, { borderLeftColor: colors.success }]}>
                                         <Text style={styles.statLabel}>{t('topCategory')}</Text>
                                         <Text style={styles.statValue}>
                                             {t(`categories.${normalizeCategory(topCategory.name)}`)}
@@ -434,7 +453,10 @@ export default function HomeScreen() {
                         {/* Legendas */}
                         <FadeIn delay={700}>
                             <View style={styles.legendsContainer}>
-                            <Text style={styles.legendsTitle}>💡 {t('tapToSeeDetails')}</Text>
+                            <View style={styles.legendsTitleRow}>
+                                <Ionicons name="information-circle-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.xs }} />
+                                <Text style={styles.legendsTitle}>{t('tapToSeeDetails')}</Text>
+                            </View>
 
                             {filteredChartData
                                 .slice()
@@ -519,40 +541,51 @@ export default function HomeScreen() {
                                 <Text style={styles.emptyCategoryText}>{t('noExpenses')}</Text>
                             </View>
                         ) : (
-                            <ScrollView>
-                                {getCategoryExpenses().map((item) => (
-                                    <View key={item.id} style={styles.expenseItemContainer}>
+                            <SwipeListView
+                                data={getCategoryExpenses()}
+                                keyExtractor={(item) => item.id.toString()}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        activeOpacity={0.7}
+                                        onPress={() => {
+                                            setShowCategoryModal(false);
+                                            setTimeout(() => setDetailExpense(item), 300);
+                                        }}
+                                        style={styles.swipeRow}
+                                    >
+                                        <ExpenseCard expense={item} />
+                                    </TouchableOpacity>
+                                )}
+                                renderHiddenItem={({ item }) => (
+                                    <View style={styles.swipeHiddenRow}>
                                         <TouchableOpacity
-                                            activeOpacity={0.7}
-                                            onPress={() => {
-                                                setShowCategoryModal(false);
-                                                setTimeout(() => setDetailExpense(item), 300);
-                                            }}
-                                            style={styles.expenseCardTouchable}
+                                            style={styles.swipeEditButton}
+                                            onPress={() => handleEditExpense(item)}
                                         >
-                                            <ExpenseCard expense={item} />
+                                            <Ionicons name="create-outline" size={24} color="#FFF" />
                                         </TouchableOpacity>
-
                                         <TouchableOpacity
-                                            style={styles.deleteButtonVisible}
+                                            style={styles.swipeDeleteButton}
                                             onPress={() => {
                                                 Alert.alert(t('confirm'), t('deleteConfirm'), [
                                                     { text: t('cancel'), style: 'cancel' },
                                                     {
                                                         text: t('delete'),
                                                         style: 'destructive',
-                                                        onPress: () => {
-                                                            handleDeleteExpense(item.id);
-                                                        },
+                                                        onPress: () => handleDeleteExpense(item.id),
                                                     },
                                                 ]);
                                             }}
                                         >
-                                            <Text style={styles.deleteIcon}>🗑️</Text>
+                                            <Ionicons name="trash-outline" size={24} color="#FFF" />
                                         </TouchableOpacity>
                                     </View>
-                                ))}
-                            </ScrollView>
+                                )}
+                                leftOpenValue={70}
+                                rightOpenValue={-70}
+                                disableLeftSwipe={false}
+                                disableRightSwipe={false}
+                            />
                         )}
                     </View>
                 </View>
@@ -563,8 +596,6 @@ export default function HomeScreen() {
                 visible={!!detailExpense}
                 expense={detailExpense}
                 onClose={() => setDetailExpense(null)}
-                onEdit={handleEditExpense}
-                onDelete={handleDeleteExpense}
             />
 
             {/* Modal de Adicionar/Editar */}
@@ -575,9 +606,16 @@ export default function HomeScreen() {
                 expenseToEdit={expenseToEdit}
             />
 
-            {/* Botão + */}
-            <TouchableOpacity style={styles.fab} onPress={() => setShowAddModal(true)}>
-                <Text style={styles.fabIcon}>+</Text>
+            {/* FAB */}
+            <TouchableOpacity style={styles.fabWrapper} onPress={() => setShowAddModal(true)} activeOpacity={0.85}>
+                <LinearGradient
+                    colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.fab}
+                >
+                    <Ionicons name="add" size={32} color={colors.textWhite} />
+                </LinearGradient>
             </TouchableOpacity>
         </View>
     );
@@ -593,31 +631,38 @@ const createStyles = (colors) => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: colors.background,
+        gap: spacing.md,
     },
     header: {
-        backgroundColor: colors.primary,
         paddingTop: sizes.headerHeight,
         paddingBottom: spacing.xl,
         paddingHorizontal: spacing.xl,
         borderBottomLeftRadius: borderRadius.xxl,
         borderBottomRightRadius: borderRadius.xxl,
     },
+    headerTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+    },
     headerTitle: {
         fontSize: fontSize.xxxl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.textWhite,
-        marginBottom: spacing.lg,
     },
     headerStats: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
-        backgroundColor: colors.primaryBg,
+        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.18)',
         padding: spacing.lg,
         borderRadius: borderRadius.lg,
     },
     headerLabel: {
         fontSize: fontSize.xs,
+        fontFamily: fontFamily.medium,
         color: '#E0E7FF',
         marginBottom: spacing.xs,
         textTransform: 'uppercase',
@@ -625,12 +670,12 @@ const createStyles = (colors) => StyleSheet.create({
     },
     headerAmount: {
         fontSize: fontSize.huge,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.textWhite,
     },
     headerCount: {
         fontSize: fontSize.huge,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.textWhite,
     },
     divider: {
@@ -642,7 +687,8 @@ const createStyles = (colors) => StyleSheet.create({
         flex: 1,
     },
     loadingText: {
-        fontSize: fontSize.xl,
+        fontSize: fontSize.lg,
+        fontFamily: fontFamily.medium,
         color: colors.textLight,
     },
     emptyState: {
@@ -650,18 +696,16 @@ const createStyles = (colors) => StyleSheet.create({
         marginTop: 80,
         paddingHorizontal: spacing.xl,
     },
-    emptyEmoji: {
-        fontSize: 64,
-        marginBottom: spacing.lg,
-    },
     emptyText: {
         fontSize: fontSize.xl + 2,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
         marginBottom: spacing.sm,
+        marginTop: spacing.lg,
     },
     emptySubtext: {
         fontSize: fontSize.md,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
         textAlign: 'center',
     },
@@ -677,11 +721,16 @@ const createStyles = (colors) => StyleSheet.create({
         ...shadows.medium,
         alignItems: 'center',
     },
+    chartTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginBottom: spacing.lg,
+    },
     chartTitle: {
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
-        marginBottom: spacing.lg,
     },
     pieWrapper: {
         alignItems: 'center',
@@ -692,13 +741,18 @@ const createStyles = (colors) => StyleSheet.create({
         marginHorizontal: spacing.xl,
         padding: spacing.lg,
         borderRadius: borderRadius.xl,
-        ...shadows.medium,
+        ...shadows.small,
+    },
+    legendsTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.lg,
     },
     legendsTitle: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
-        marginBottom: spacing.lg,
-        textAlign: 'center',
     },
     modalOverlay: {
         flex: 1,
@@ -722,7 +776,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     categoryModalTitle: {
         fontSize: fontSize.xxxl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
     },
     closeButton: {
@@ -736,46 +790,49 @@ const createStyles = (colors) => StyleSheet.create({
     },
     emptyCategoryText: {
         fontSize: fontSize.lg,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
-    expenseItemContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginHorizontal: spacing.xl,
-        marginVertical: spacing.xs + 2,
+    swipeRow: {
+        backgroundColor: colors.surface,
     },
-    expenseCardTouchable: {
+    swipeHiddenRow: {
         flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginVertical: spacing.md - 2,
     },
-    deleteButtonVisible: {
-        width: 50,
-        height: 50,
+    swipeEditButton: {
+        backgroundColor: colors.primary,
+        width: 70,
+        height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: spacing.sm,
+        borderTopLeftRadius: borderRadius.md,
+        borderBottomLeftRadius: borderRadius.md,
     },
-    deleteIcon: {
-        fontSize: fontSize.xxl + 4,
+    swipeDeleteButton: {
+        backgroundColor: colors.error,
+        width: 70,
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderTopRightRadius: borderRadius.md,
+        borderBottomRightRadius: borderRadius.md,
     },
-    fab: {
+    fabWrapper: {
         position: 'absolute',
         bottom: spacing.xxl,
         right: spacing.xxl,
+        ...shadows.colored,
+    },
+    fab: {
         width: sizes.fabSize,
         height: sizes.fabSize,
         borderRadius: borderRadius.full,
-        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
-        ...shadows.colored,
-    },
-    fabIcon: {
-        color: colors.textWhite,
-        fontSize: fontSize.giant,
-        fontWeight: '300',
-        lineHeight: fontSize.giant,
-        textAlign: 'center',
-        marginTop: 1,
     },
     filtersContainerMain: {
         flexDirection: 'row',
@@ -800,7 +857,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     filterButtonMainText: {
         fontSize: fontSize.sm,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.textLight,
     },
     filterButtonMainTextActive: {
@@ -818,24 +875,16 @@ const createStyles = (colors) => StyleSheet.create({
         borderRadius: borderRadius.lg,
         ...shadows.medium,
     },
-    searchIcon: {
-        fontSize: fontSize.xl,
-        marginRight: spacing.sm,
-    },
     searchInput: {
         flex: 1,
         fontSize: fontSize.base,
+        fontFamily: fontFamily.regular,
         color: colors.text,
         padding: 0,
     },
     clearButton: {
         padding: spacing.xs,
         marginLeft: spacing.sm,
-    },
-    clearButtonText: {
-        fontSize: fontSize.xl,
-        color: colors.textLight,
-        fontWeight: fontWeight.light,
     },
     sortContainer: {
         flexDirection: 'row',
@@ -848,8 +897,8 @@ const createStyles = (colors) => StyleSheet.create({
     },
     sortLabel: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.medium,
         color: colors.textLight,
-        fontWeight: fontWeight.medium,
     },
     sortButton: {
         flexDirection: 'row',
@@ -863,8 +912,8 @@ const createStyles = (colors) => StyleSheet.create({
     },
     sortButtonText: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
-        fontWeight: fontWeight.semibold,
     },
     sortDropdown: {
         position: 'absolute',
@@ -889,12 +938,12 @@ const createStyles = (colors) => StyleSheet.create({
     },
     sortOptionText: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.medium,
         color: colors.text,
-        fontWeight: fontWeight.medium,
     },
     sortOptionTextActive: {
         color: colors.primary,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
     },
     statsContainer: {
         backgroundColor: colors.surface,
@@ -902,13 +951,17 @@ const createStyles = (colors) => StyleSheet.create({
         marginBottom: spacing.md,
         padding: spacing.lg,
         borderRadius: borderRadius.xl,
-        ...shadows.medium,
+        ...shadows.small,
+    },
+    statsTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
     },
     statsTitle: {
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
-        marginBottom: spacing.lg,
     },
     statsGrid: {
         gap: spacing.md,
@@ -922,6 +975,7 @@ const createStyles = (colors) => StyleSheet.create({
     },
     statLabel: {
         fontSize: fontSize.xs,
+        fontFamily: fontFamily.semibold,
         color: colors.textLight,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -929,12 +983,13 @@ const createStyles = (colors) => StyleSheet.create({
     },
     statValue: {
         fontSize: fontSize.xxl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.primary,
         marginBottom: spacing.xs,
     },
     statSubtext: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
 });

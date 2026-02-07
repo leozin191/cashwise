@@ -5,15 +5,15 @@ import {
     StyleSheet,
     Modal,
     TouchableOpacity,
-    Alert,
     Animated,
     PanResponder,
     Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
 import { normalizeCategory, getCategoryColor } from '../constants/categories';
 import CategoryIcon from './CategoryIcon';
 import CurrencyDisplay from './CurrencyDisplay';
@@ -21,7 +21,7 @@ import CurrencyDisplay from './CurrencyDisplay';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DISMISS_THRESHOLD = 120;
 
-export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, onDelete }) {
+export default function ExpenseDetailModal({ visible, expense, onClose }) {
     const { colors } = useTheme();
     const { t, language } = useLanguage();
     const { getCurrencyInfo } = useCurrency();
@@ -32,7 +32,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: (_, gesture) => {
-                // Only respond to downward swipes
                 return gesture.dy > 5 && Math.abs(gesture.dy) > Math.abs(gesture.dx);
             },
             onPanResponderMove: (_, gesture) => {
@@ -42,7 +41,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
             },
             onPanResponderRelease: (_, gesture) => {
                 if (gesture.dy > DISMISS_THRESHOLD || gesture.vy > 0.5) {
-                    // Swipe far enough or fast enough → dismiss
                     Animated.timing(translateY, {
                         toValue: SCREEN_HEIGHT,
                         duration: 250,
@@ -52,7 +50,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                         setTimeout(() => translateY.setValue(0), 100);
                     });
                 } else {
-                    // Snap back
                     Animated.spring(translateY, {
                         toValue: 0,
                         useNativeDriver: true,
@@ -89,21 +86,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
         });
     };
 
-    const handleDelete = () => {
-        Alert.alert(t('confirm'), t('deleteConfirm'), [
-            { text: t('cancel'), style: 'cancel' },
-            {
-                text: t('delete'),
-                style: 'destructive',
-                onPress: () => {
-                    onDelete(expense.id);
-                    onClose();
-                },
-            },
-        ]);
-    };
-
-    // Opacity fades as user swipes down
     const overlayOpacity = translateY.interpolate({
         inputRange: [0, SCREEN_HEIGHT * 0.4],
         outputRange: [1, 0],
@@ -125,7 +107,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                 ]}
                 {...panResponder.panHandlers}
             >
-                {/* Handle bar — visual cue for swipe */}
                 <View style={styles.handleBar} />
 
                 {/* Category icon header */}
@@ -135,7 +116,8 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     </View>
                     {isSubscription && (
                         <View style={styles.subscriptionBadge}>
-                            <Text style={styles.subscriptionBadgeText}>🔄 {t('subscriptions')}</Text>
+                            <Ionicons name="repeat" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                            <Text style={styles.subscriptionBadgeText}>{t('subscriptions')}</Text>
                         </View>
                     )}
                 </View>
@@ -155,51 +137,46 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                 {/* Details grid */}
                 <View style={styles.detailsCard}>
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>📁 {t('category')}</Text>
+                        <View style={styles.detailLabelRow}>
+                            <Ionicons name="folder-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                            <Text style={styles.detailLabel}>{t('category')}</Text>
+                        </View>
                         <Text style={styles.detailValue}>{t(`categories.${category}`)}</Text>
                     </View>
 
                     <View style={styles.separator} />
 
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>📅 {language === 'pt' ? 'Data' : 'Date'}</Text>
+                        <View style={styles.detailLabelRow}>
+                            <Ionicons name="calendar-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                            <Text style={styles.detailLabel}>{language === 'pt' ? 'Data' : 'Date'}</Text>
+                        </View>
                         <Text style={styles.detailValue}>{formatFullDate(expense.date)}</Text>
                     </View>
 
                     <View style={styles.separator} />
 
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>🕐 {language === 'pt' ? 'Adicionado' : 'Added'}</Text>
+                        <View style={styles.detailLabelRow}>
+                            <Ionicons name="time-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                            <Text style={styles.detailLabel}>{language === 'pt' ? 'Adicionado' : 'Added'}</Text>
+                        </View>
                         <Text style={styles.detailValue}>{formatTime(expense.createdAt)}</Text>
                     </View>
 
                     <View style={styles.separator} />
 
                     <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>💱 {t('currency')}</Text>
+                        <View style={styles.detailLabelRow}>
+                            <Ionicons name="swap-horizontal-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                            <Text style={styles.detailLabel}>{t('currency')}</Text>
+                        </View>
                         <Text style={styles.detailValue}>
                             {getCurrencyInfo().flag} {expense.currency || 'EUR'} — {getCurrencyInfo().symbol}{parseFloat(expense.amount).toFixed(2)}
                         </Text>
                     </View>
                 </View>
 
-                {/* Action buttons */}
-                <View style={styles.actions}>
-                    <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => {
-                            onClose();
-                            setTimeout(() => onEdit(expense), 300);
-                        }}
-                    >
-                        <Text style={styles.editButtonIcon}>✏️</Text>
-                        <Text style={styles.editButtonText}>{t('editExpense')}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                        <Text style={styles.deleteButtonIcon}>🗑️</Text>
-                    </TouchableOpacity>
-                </View>
             </Animated.View>
         </Modal>
     );
@@ -252,22 +229,24 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.xs,
         borderRadius: borderRadius.xl,
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     subscriptionBadgeText: {
         fontSize: fontSize.xs,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.primary,
     },
     description: {
         fontSize: fontSize.xxl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
         textAlign: 'center',
         marginBottom: spacing.sm,
     },
     amount: {
         fontSize: fontSize.giant,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.primary,
         marginBottom: spacing.xl,
     },
@@ -284,13 +263,18 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
         alignItems: 'center',
         paddingVertical: spacing.md,
     },
+    detailLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     detailLabel: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
     detailValue: {
         fontSize: fontSize.sm,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
         textAlign: 'right',
         flex: 1,
@@ -299,43 +283,5 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
     separator: {
         height: 1,
         backgroundColor: colors.border,
-    },
-    actions: {
-        flexDirection: 'row',
-        width: '100%',
-        gap: spacing.md,
-        marginBottom: spacing.lg,
-    },
-    editButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.primary,
-        paddingVertical: spacing.lg,
-        borderRadius: borderRadius.lg,
-        gap: spacing.sm,
-        ...shadows.colored,
-    },
-    editButtonIcon: {
-        fontSize: fontSize.lg,
-    },
-    editButtonText: {
-        color: colors.textWhite,
-        fontSize: fontSize.base,
-        fontWeight: fontWeight.bold,
-    },
-    deleteButton: {
-        width: 52,
-        height: 52,
-        borderRadius: borderRadius.lg,
-        backgroundColor: colors.background,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.error,
-    },
-    deleteButtonIcon: {
-        fontSize: fontSize.xl,
     },
 });

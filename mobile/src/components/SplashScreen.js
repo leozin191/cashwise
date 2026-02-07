@@ -1,13 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, StyleSheet, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function SplashScreen({ onFinish }) {
+export default function SplashScreen({ onFinish, fontsReady }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.8)).current;
-    const dotsAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        // 1. Logo aparece com fade + scale
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
@@ -21,38 +21,28 @@ export default function SplashScreen({ onFinish }) {
             }),
         ]).start();
 
-        // 2. Dots pulsando
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(dotsAnim, {
-                    toValue: 1,
-                    duration: 500,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(dotsAnim, {
-                    toValue: 0.3,
-                    duration: 500,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-
-        // 3. Depois de 2 segundos, fade out e abre o app
         const timer = setTimeout(() => {
-            Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 400,
-                useNativeDriver: true,
-            }).start(() => {
-                onFinish();
-            });
+            if (fontsReady) {
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 400,
+                    useNativeDriver: true,
+                }).start(() => {
+                    onFinish();
+                });
+            }
         }, 2000);
 
         return () => clearTimeout(timer);
-    }, []);
+    }, [fontsReady]);
 
     return (
-        <View style={styles.container}>
+        <LinearGradient
+            colors={['#6366F1', '#4F46E5', '#3730A3']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.container}
+        >
             <Animated.View
                 style={[
                     styles.content,
@@ -62,33 +52,39 @@ export default function SplashScreen({ onFinish }) {
                     },
                 ]}
             >
-                <Text style={styles.emoji}>💰</Text>
+                <View style={styles.iconCircle}>
+                    <Ionicons name="wallet" size={56} color="#FFFFFF" />
+                </View>
                 <Text style={styles.title}>CashWise</Text>
                 <Text style={styles.subtitle}>Controle Inteligente</Text>
             </Animated.View>
 
-            <Animated.View style={[styles.dots, { opacity: dotsAnim }]}>
-                <Text style={styles.dotsText}>● ● ●</Text>
-            </Animated.View>
+            <View style={styles.loaderContainer}>
+                <ActivityIndicator size="small" color="#E0E7FF" />
+            </View>
 
             <Text style={styles.version}>v1.0.0</Text>
-        </View>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#6366F1',
         alignItems: 'center',
         justifyContent: 'center',
     },
     content: {
         alignItems: 'center',
     },
-    emoji: {
-        fontSize: 64,
-        marginBottom: 16,
+    iconCircle: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
     },
     title: {
         fontSize: 42,
@@ -101,14 +97,10 @@ const styles = StyleSheet.create({
         color: '#E0E7FF',
         marginTop: 8,
         letterSpacing: 1,
+        fontWeight: '400',
     },
-    dots: {
+    loaderContainer: {
         marginTop: 48,
-    },
-    dotsText: {
-        fontSize: 16,
-        color: '#E0E7FF',
-        letterSpacing: 8,
     },
     version: {
         position: 'absolute',

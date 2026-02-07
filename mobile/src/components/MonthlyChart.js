@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getCurrencyByCode } from '../constants/currencies';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
 import { groupByMonth, getLastNMonths } from '../utils/helpers';
 import { useState, useEffect } from 'react';
 import currencyService from '../services/currency';
@@ -41,7 +42,6 @@ export default function MonthlyChart({ expenses }) {
 
         const labels = lastMonths.map((m) => m.label);
 
-        // Calcula estatísticas
         const nonZeroData = data.filter(v => v > 0);
         if (nonZeroData.length > 0) {
             setStats({
@@ -62,11 +62,14 @@ export default function MonthlyChart({ expenses }) {
     if (!chartData || expenses.length === 0) {
         return (
             <View style={[styles.container, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                    📈 {t('monthlyEvolution')}
-                </Text>
+                <View style={styles.titleRow}>
+                    <Ionicons name="trending-up-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                    <Text style={[styles.title, { color: colors.text }]}>
+                        {t('monthlyEvolution')}
+                    </Text>
+                </View>
                 <View style={styles.emptyState}>
-                    <Text style={[styles.emptyEmoji]}>📊</Text>
+                    <Ionicons name="bar-chart-outline" size={48} color={colors.textLight} />
                     <Text style={[styles.emptyText, { color: colors.text }]}>
                         {t('noDataYet')}
                     </Text>
@@ -80,9 +83,12 @@ export default function MonthlyChart({ expenses }) {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.title, { color: colors.text }]}>
-                📈 {t('monthlyEvolution')}
-            </Text>
+            <View style={styles.titleRow}>
+                <Ionicons name="trending-up-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                <Text style={[styles.title, { color: colors.text }]}>
+                    {t('monthlyEvolution')}
+                </Text>
+            </View>
 
             <LineChart
                 data={chartData}
@@ -152,26 +158,28 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.xl,
         ...shadows.medium,
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
     title: {
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.bold,
-        marginBottom: spacing.md,
+        fontFamily: fontFamily.bold,
     },
     emptyState: {
         alignItems: 'center',
         paddingVertical: spacing.xxl,
     },
-    emptyEmoji: {
-        fontSize: 48,
-        marginBottom: spacing.md,
-    },
     emptyText: {
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         marginBottom: spacing.xs,
+        marginTop: spacing.md,
     },
     emptySubtext: {
         fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
         textAlign: 'center',
     },
     statsRow: {
@@ -184,11 +192,12 @@ const styles = StyleSheet.create({
     },
     statLabel: {
         fontSize: fontSize.xs,
+        fontFamily: fontFamily.medium,
         textTransform: 'uppercase',
         marginBottom: spacing.xs,
     },
     statValue: {
         fontSize: fontSize.xl,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
     },
 });

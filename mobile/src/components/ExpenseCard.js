@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { normalizeCategory } from '../constants/categories';
 import { formatDate } from '../utils/helpers';
-import { spacing, fontSize, fontWeight, borderRadius } from '../constants/theme';
+import { spacing, fontSize, fontFamily, borderRadius } from '../constants/theme';
 import CurrencyDisplay from './CurrencyDisplay';
 import { getCurrencyByCode } from '../constants/currencies';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -54,7 +54,6 @@ const createStyles = (colors) => StyleSheet.create({
     card: {
         backgroundColor: colors.surface,
         padding: spacing.lg,
-        marginHorizontal: spacing.xl,
         marginVertical: spacing.md - 2,
         borderRadius: 12,
         flexDirection: 'row',
@@ -81,21 +80,23 @@ const createStyles = (colors) => StyleSheet.create({
     },
     description: {
         fontSize: fontSize.base - 1,
-        fontWeight: fontWeight.semibold,
+        fontFamily: fontFamily.semibold,
         color: colors.text,
         marginBottom: spacing.xs,
     },
     date: {
         fontSize: fontSize.xs + 1,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
     amount: {
         fontSize: fontSize.lg + 1,
-        fontWeight: fontWeight.bold,
+        fontFamily: fontFamily.bold,
         color: colors.text,
     },
     originalAmount: {
         fontSize: fontSize.xs,
+        fontFamily: fontFamily.regular,
         color: colors.textLight,
         marginTop: spacing.xs,
     },

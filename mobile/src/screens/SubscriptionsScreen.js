@@ -11,10 +11,12 @@ import {
     Switch,
     RefreshControl,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
 import { CURRENCIES } from '../constants/currencies';
 import CategoryIcon from '../components/CategoryIcon';
@@ -131,7 +133,7 @@ export default function SubscriptionsScreen() {
         try {
             if (editingSub) {
                 await subscriptionService.update(editingSub.id, data);
-                Alert.alert('✅', t('subscriptionSaved'));
+                Alert.alert(t('success'), t('subscriptionSaved'));
             } else {
                 await subscriptionService.create(data);
 
@@ -143,7 +145,7 @@ export default function SubscriptionsScreen() {
                         {
                             text: t('no'),
                             style: 'cancel',
-                            onPress: () => Alert.alert('✅', t('subscriptionSaved')),
+                            onPress: () => Alert.alert(t('success'), t('subscriptionSaved')),
                         },
                         {
                             text: t('yes'),
@@ -157,9 +159,9 @@ export default function SubscriptionsScreen() {
                                         category: data.category,
                                         date: today,
                                     });
-                                    Alert.alert('✅', t('subscriptionSaved') + '\n' + t('processSuccess'));
+                                    Alert.alert(t('success'), t('subscriptionSaved') + '\n' + t('processSuccess'));
                                 } catch (error) {
-                                    Alert.alert('✅', t('subscriptionSaved'));
+                                    Alert.alert(t('success'), t('subscriptionSaved'));
                                 }
                             },
                         },
@@ -191,7 +193,7 @@ export default function SubscriptionsScreen() {
                 onPress: async () => {
                     try {
                         await subscriptionService.delete(sub.id);
-                        Alert.alert('✅', t('subscriptionDeleted'));
+                        Alert.alert(t('success'), t('subscriptionDeleted'));
                         await loadSubscriptions();
                     } catch (error) {
                         Alert.alert(t('error'), t('couldNotDelete'));
@@ -206,15 +208,20 @@ export default function SubscriptionsScreen() {
     return (
         <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>🔄 {t('subscriptions')}</Text>
+            <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <Text style={styles.headerTitle}>{t('subscriptions')}</Text>
                 <View style={styles.headerStats}>
                     <Text style={styles.headerLabel}>{t('totalMonthly')}</Text>
                     <Text style={styles.headerAmount}>
                         {getCurrencyInfo().symbol}{getMonthlyTotal().toFixed(2)}
                     </Text>
                 </View>
-            </View>
+            </LinearGradient>
 
             <ScrollView
                 style={styles.content}
@@ -224,7 +231,7 @@ export default function SubscriptionsScreen() {
             >
                 {subscriptions.length === 0 ? (
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>🔄</Text>
+                        <Ionicons name="repeat-outline" size={64} color={colors.textLight} />
                         <Text style={styles.emptyText}>{t('noSubscriptions')}</Text>
                         <Text style={styles.emptySubtext}>{t('noSubscriptionsHint')}</Text>
                     </View>
@@ -273,7 +280,7 @@ export default function SubscriptionsScreen() {
 
                 {/* Botão Adicionar */}
                 <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-                    <Text style={styles.addButtonIcon}>+</Text>
+                    <Ionicons name="add-circle" size={22} color={colors.primary} style={{ marginRight: spacing.sm }} />
                     <Text style={styles.addButtonText}>{t('addSubscription')}</Text>
                 </TouchableOpacity>
 
@@ -382,22 +389,20 @@ export default function SubscriptionsScreen() {
 const createStyles = (colors) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     header: {
-        backgroundColor: colors.primary,
         paddingTop: 60,
         paddingBottom: spacing.xl,
         paddingHorizontal: spacing.xl,
         borderBottomLeftRadius: borderRadius.xxl,
         borderBottomRightRadius: borderRadius.xxl,
     },
-    headerTitle: { fontSize: fontSize.xxxl, fontWeight: fontWeight.bold, color: colors.textWhite },
+    headerTitle: { fontSize: fontSize.xxxl, fontFamily: fontFamily.bold, color: colors.textWhite },
     headerStats: { marginTop: spacing.md },
-    headerLabel: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.7)' },
-    headerAmount: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.textWhite },
+    headerLabel: { fontSize: fontSize.sm, fontFamily: fontFamily.medium, color: 'rgba(255,255,255,0.7)' },
+    headerAmount: { fontSize: fontSize.xxl, fontFamily: fontFamily.bold, color: colors.textWhite },
     content: { flex: 1, paddingTop: spacing.lg },
     emptyState: { alignItems: 'center', paddingVertical: spacing.xxxl * 2 },
-    emptyEmoji: { fontSize: 64, marginBottom: spacing.lg },
-    emptyText: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text, marginBottom: spacing.sm },
-    emptySubtext: { fontSize: fontSize.sm, color: colors.textLight, textAlign: 'center' },
+    emptyText: { fontSize: fontSize.xl, fontFamily: fontFamily.bold, color: colors.text, marginBottom: spacing.sm, marginTop: spacing.lg },
+    emptySubtext: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, textAlign: 'center' },
     card: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -422,11 +427,11 @@ const createStyles = (colors) => StyleSheet.create({
     },
     iconInactive: { backgroundColor: colors.border },
     cardInfo: { flex: 1, marginRight: spacing.sm },
-    cardTitle: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: 2 },
+    cardTitle: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.text, marginBottom: 2 },
     textInactive: { color: colors.textLight },
-    cardSubtext: { fontSize: fontSize.xs, color: colors.textLight },
+    cardSubtext: { fontSize: fontSize.xs, fontFamily: fontFamily.regular, color: colors.textLight },
     cardRight: { alignItems: 'flex-end' },
-    cardAmount: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.primary, marginBottom: spacing.xs },
+    cardAmount: { fontSize: fontSize.lg, fontFamily: fontFamily.bold, color: colors.primary, marginBottom: spacing.xs },
     switch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
     addButton: {
         flexDirection: 'row',
@@ -441,8 +446,7 @@ const createStyles = (colors) => StyleSheet.create({
         borderColor: colors.primary,
         marginTop: spacing.sm,
     },
-    addButtonIcon: { fontSize: fontSize.xxl, color: colors.primary, fontWeight: fontWeight.bold, marginRight: spacing.sm },
-    addButtonText: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.primary },
+    addButtonText: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.primary },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modal: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xxxl, borderTopRightRadius: borderRadius.xxxl, maxHeight: '85%' },
     modalHeader: {
@@ -453,10 +457,10 @@ const createStyles = (colors) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
-    modalTitle: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text },
+    modalTitle: { fontSize: fontSize.xxl, fontFamily: fontFamily.bold, color: colors.text },
     closeButton: { fontSize: fontSize.huge, color: colors.textLight, fontWeight: fontWeight.light },
     modalContent: { padding: spacing.xl },
-    label: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text, marginBottom: spacing.sm, marginTop: spacing.lg },
+    label: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.text, marginBottom: spacing.sm, marginTop: spacing.lg },
     input: {
         backgroundColor: colors.background,
         borderWidth: 1,
@@ -464,6 +468,7 @@ const createStyles = (colors) => StyleSheet.create({
         borderRadius: borderRadius.md,
         padding: spacing.lg,
         fontSize: fontSize.lg,
+        fontFamily: fontFamily.regular,
         color: colors.text,
     },
     amountContainer: {
@@ -475,8 +480,8 @@ const createStyles = (colors) => StyleSheet.create({
         borderRadius: borderRadius.md,
         paddingLeft: spacing.lg,
     },
-    currencySymbol: { fontSize: fontSize.xl, fontWeight: fontWeight.semibold, color: colors.primary, marginRight: spacing.sm },
-    amountInput: { flex: 1, padding: spacing.lg, fontSize: fontSize.xl, fontWeight: fontWeight.semibold, color: colors.text },
+    currencySymbol: { fontSize: fontSize.xl, fontFamily: fontFamily.semibold, color: colors.primary, marginRight: spacing.sm },
+    amountInput: { flex: 1, padding: spacing.lg, fontSize: fontSize.xl, fontFamily: fontFamily.semibold, color: colors.text },
     frequencyRow: { flexDirection: 'row', gap: spacing.sm },
     freqButton: {
         flex: 1,
@@ -488,7 +493,7 @@ const createStyles = (colors) => StyleSheet.create({
         backgroundColor: colors.background,
     },
     freqButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    freqText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.textLight },
+    freqText: { fontSize: fontSize.sm, fontFamily: fontFamily.semibold, color: colors.textLight },
     freqTextActive: { color: colors.textWhite },
     categoriesScroll: { marginBottom: spacing.md },
     catChip: {
@@ -503,7 +508,7 @@ const createStyles = (colors) => StyleSheet.create({
         backgroundColor: colors.background,
     },
     catChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    catText: { fontSize: fontSize.sm, color: colors.textLight, marginLeft: spacing.xs },
+    catText: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, marginLeft: spacing.xs },
     catTextActive: { color: colors.textWhite },
     saveButton: {
         backgroundColor: colors.primary,
@@ -513,5 +518,5 @@ const createStyles = (colors) => StyleSheet.create({
         marginTop: spacing.xl,
         ...shadows.colored,
     },
-    saveButtonText: { color: colors.textWhite, fontSize: fontSize.lg, fontWeight: fontWeight.bold },
+    saveButtonText: { color: colors.textWhite, fontSize: fontSize.lg, fontFamily: fontFamily.bold },
 });

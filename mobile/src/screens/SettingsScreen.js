@@ -9,9 +9,11 @@ import {
     Alert,
     Modal,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { CURRENCIES } from '../constants/currencies';
 import currencyService from '../services/currency';
@@ -52,9 +54,9 @@ export default function SettingsScreen() {
             setUpdatingRates(true);
             await currencyService.forceUpdate();
             await loadExchangeRateInfo();
-            Alert.alert('✅', t('ratesUpdated'));
+            Alert.alert(t('success'), t('ratesUpdated'));
         } catch (error) {
-            Alert.alert('❌', t('errorUpdating'));
+            Alert.alert(t('error'), t('errorUpdating'));
             console.error('Error updating rates:', error);
         } finally {
             setUpdatingRates(false);
@@ -85,7 +87,7 @@ export default function SettingsScreen() {
                     text: t('clearData'),
                     style: 'destructive',
                     onPress: () => {
-                        Alert.alert('✅', t('featureInDev'));
+                        Alert.alert(t('success'), t('featureInDev'));
                     },
                 },
             ]
@@ -93,11 +95,11 @@ export default function SettingsScreen() {
     };
 
     const handleExportBackup = () => {
-        Alert.alert('✅', t('featureInDev'));
+        Alert.alert(t('success'), t('featureInDev'));
     };
 
     const handleImportBackup = () => {
-        Alert.alert('✅', t('featureInDev'));
+        Alert.alert(t('success'), t('featureInDev'));
     };
 
     const styles = createStyles(colors);
@@ -105,14 +107,22 @@ export default function SettingsScreen() {
     return (
         <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>⚙️ {t('settings')}</Text>
-            </View>
+            <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <Text style={styles.headerTitle}>{t('settings')}</Text>
+            </LinearGradient>
 
             <ScrollView style={styles.content}>
                 {/* Aparência */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🌙 {t('appearance')}</Text>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="moon-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('appearance')}</Text>
+                    </View>
 
                     {/* Modo Escuro */}
                     <View style={styles.settingItem}>
@@ -151,7 +161,10 @@ export default function SettingsScreen() {
 
                 {/* Gastos */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>💰 {t('expenses')}</Text>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="wallet-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('expenses')}</Text>
+                    </View>
 
                     {/* Moeda */}
                     <TouchableOpacity
@@ -170,7 +183,10 @@ export default function SettingsScreen() {
 
                 {/* Taxas de Câmbio */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>💱 {t('exchangeRates')}</Text>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="swap-horizontal-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('exchangeRates')}</Text>
+                    </View>
 
                     {/* Info das taxas */}
                     <View style={styles.settingItem}>
@@ -190,15 +206,26 @@ export default function SettingsScreen() {
                         onPress={handleUpdateRates}
                         disabled={updatingRates}
                     >
-                        <Text style={styles.updateButtonText}>
-                            {updatingRates ? `⏳ ${t('updating')}` : `🔄 ${t('updateRates')}`}
-                        </Text>
+                        <View style={styles.updateButtonContent}>
+                            <Ionicons
+                                name={updatingRates ? 'hourglass-outline' : 'refresh-outline'}
+                                size={18}
+                                color={colors.textWhite}
+                                style={{ marginRight: spacing.sm }}
+                            />
+                            <Text style={styles.updateButtonText}>
+                                {updatingRates ? t('updating') : t('updateRates')}
+                            </Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
 
                 {/* Dados */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📊 {t('data')}</Text>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="folder-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('data')}</Text>
+                    </View>
 
                     {/* Exportar */}
                     <TouchableOpacity style={styles.settingItem} onPress={handleExportBackup}>
@@ -232,7 +259,10 @@ export default function SettingsScreen() {
 
                 {/* Sobre */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>ℹ️ {t('about')}</Text>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="information-circle-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('about')}</Text>
+                    </View>
 
                     {/* Versão */}
                     <View style={styles.settingItem}>
@@ -286,7 +316,7 @@ export default function SettingsScreen() {
                                     </View>
                                     <Text style={styles.currencySymbol}>{curr.symbol}</Text>
                                     {currency === curr.code && (
-                                        <Text style={styles.checkMark}>✓</Text>
+                                        <Ionicons name="checkmark" size={20} color={colors.primary} />
                                     )}
                                 </TouchableOpacity>
                             ))}
@@ -305,7 +335,6 @@ const createStyles = (colors) =>
             backgroundColor: colors.background,
         },
         header: {
-            backgroundColor: colors.primary,
             paddingTop: 60,
             paddingBottom: spacing.xl,
             paddingHorizontal: spacing.xl,
@@ -314,7 +343,7 @@ const createStyles = (colors) =>
         },
         headerTitle: {
             fontSize: fontSize.xxxl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.textWhite,
         },
         content: {
@@ -324,12 +353,16 @@ const createStyles = (colors) =>
         section: {
             marginBottom: spacing.xxl,
         },
-        sectionTitle: {
-            fontSize: fontSize.lg,
-            fontWeight: fontWeight.bold,
-            color: colors.text,
+        sectionTitleRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
             marginBottom: spacing.md,
             marginHorizontal: spacing.xl,
+        },
+        sectionTitle: {
+            fontSize: fontSize.lg,
+            fontFamily: fontFamily.bold,
+            color: colors.text,
         },
         settingItem: {
             flexDirection: 'row',
@@ -348,17 +381,18 @@ const createStyles = (colors) =>
         },
         settingLabel: {
             fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.text,
             marginBottom: spacing.xs,
         },
         settingSubtext: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.textLight,
         },
         settingValue: {
             fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.textLight,
         },
         languageButton: {
@@ -371,7 +405,7 @@ const createStyles = (colors) =>
         },
         languageButtonText: {
             fontSize: fontSize.sm,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.primary,
         },
         arrow: {
@@ -381,6 +415,28 @@ const createStyles = (colors) =>
         },
         dangerText: {
             color: colors.error,
+        },
+        updateButton: {
+            backgroundColor: colors.primary,
+            marginHorizontal: spacing.xl,
+            marginTop: spacing.sm,
+            paddingVertical: spacing.md,
+            paddingHorizontal: spacing.lg,
+            borderRadius: borderRadius.md,
+            alignItems: 'center',
+            ...shadows.small,
+        },
+        updateButtonDisabled: {
+            opacity: 0.5,
+        },
+        updateButtonContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        updateButtonText: {
+            fontSize: fontSize.base,
+            fontFamily: fontFamily.semibold,
+            color: colors.textWhite,
         },
         modalOverlay: {
             flex: 1,
@@ -403,7 +459,7 @@ const createStyles = (colors) =>
         },
         modalTitle: {
             fontSize: fontSize.xxl,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.text,
         },
         closeButton: {
@@ -434,40 +490,18 @@ const createStyles = (colors) =>
         },
         currencyName: {
             fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
+            fontFamily: fontFamily.semibold,
             color: colors.text,
         },
         currencyCode: {
             fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
             color: colors.textLight,
         },
         currencySymbol: {
             fontSize: fontSize.lg,
-            fontWeight: fontWeight.bold,
+            fontFamily: fontFamily.bold,
             color: colors.textLight,
             marginRight: spacing.md,
-        },
-        checkMark: {
-            fontSize: fontSize.xl,
-            color: colors.primary,
-            fontWeight: fontWeight.bold,
-        },
-        updateButton: {
-            backgroundColor: colors.primary,
-            marginHorizontal: spacing.xl,
-            marginTop: spacing.sm,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.lg,
-            borderRadius: borderRadius.md,
-            alignItems: 'center',
-            ...shadows.small,
-        },
-        updateButtonDisabled: {
-            opacity: 0.5,
-        },
-        updateButtonText: {
-            fontSize: fontSize.base,
-            fontWeight: fontWeight.semibold,
-            color: colors.textWhite,
         },
     });
