@@ -27,7 +27,7 @@ import CategoryLegend from '../components/CategoryLegend';
 import AddExpenseModal from '../components/AddExpenseModal';
 
 import { CATEGORY_COLORS, normalizeCategory } from '../constants/categories';
-import { getCurrencyByCode } from '../constants/currencies';
+
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows, sizes } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -49,9 +49,9 @@ export default function HomeScreen() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
 
-    const { language, changeLanguage, t } = useLanguage();
+    const { language, t } = useLanguage();
     const { colors } = useTheme();
-    const { currency, getCurrencyInfo } = useCurrency();
+    const { currency } = useCurrency();
 
     const [filter, setFilter] = useState('thisMonth');
     const [searchQuery, setSearchQuery] = useState('');
