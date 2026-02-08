@@ -2,8 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BUDGETS_KEY = '@budgets';
 
-// Estrutura: { category: { limit: 500, currency: 'EUR' } }
-
 export async function getBudgets() {
     try {
         const data = await AsyncStorage.getItem(BUDGETS_KEY);
@@ -40,11 +38,11 @@ export async function deleteBudget(category) {
 
 export function calculateProgress(spent, limit) {
     if (limit === 0) return 0;
-    return (spent / limit) * 100;  // ← Permite passar de 100%!
+    return (spent / limit) * 100;
 }
 
 export function getAlertLevel(percentage) {
-    if (percentage >= 100) return 'critical'; // Vermelho
-    if (percentage >= 80) return 'warning';   // Amarelo
-    return 'safe';                            // Verde
+    if (percentage >= 100) return 'critical';
+    if (percentage >= 80) return 'warning';
+    return 'safe';
 }

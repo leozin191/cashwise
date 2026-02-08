@@ -1,13 +1,15 @@
 import axios from 'axios';
 
-// Pega da variável de ambiente
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api/expenses';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api';
+const EXPENSES_URL = BASE_URL.endsWith('/api') ? `${BASE_URL}/expenses` : BASE_URL;
+const SUBSCRIPTIONS_URL = BASE_URL.endsWith('/api') ? `${BASE_URL}/subscriptions` : BASE_URL.replace('/expenses', '/subscriptions');
+
+const api = axios.create({ timeout: 15000 });
 
 export const expenseService = {
-    // Buscar todas as despesas
     getAll: async () => {
         try {
-            const response = await axios.get(API_URL);
+            const response = await api.get(EXPENSES_URL);
             return response.data;
         } catch (error) {
             console.error('Erro ao buscar despesas:', error);
@@ -15,10 +17,9 @@ export const expenseService = {
         }
     },
 
-    // Criar despesa
     create: async (expense) => {
         try {
-            const response = await axios.post(API_URL, expense);
+            const response = await api.post(EXPENSES_URL, expense);
             return response.data;
         } catch (error) {
             console.error('Erro ao criar despesa:', error);
@@ -26,20 +27,18 @@ export const expenseService = {
         }
     },
 
-    // Deletar despesa
     delete: async (id) => {
         try {
-            await axios.delete(`${API_URL}/${id}`);
+            await api.delete(`${EXPENSES_URL}/${id}`);
         } catch (error) {
             console.error('Erro ao deletar despesa:', error);
             throw error;
         }
     },
 
-    // Atualizar despesa
     update: async (id, expense) => {
         try {
-            const response = await axios.put(`${API_URL}/${id}`, expense);
+            const response = await api.put(`${EXPENSES_URL}/${id}`, expense);
             return response.data;
         } catch (error) {
             console.error('Erro ao atualizar despesa:', error);
@@ -51,7 +50,7 @@ export const expenseService = {
 export const subscriptionService = {
     getAll: async () => {
         try {
-            const response = await axios.get(API_URL.replace('/expenses', '/subscriptions'));
+            const response = await api.get(SUBSCRIPTIONS_URL);
             return response.data;
         } catch (error) {
             console.error('Erro ao buscar subscriptions:', error);
@@ -61,7 +60,7 @@ export const subscriptionService = {
 
     create: async (subscription) => {
         try {
-            const response = await axios.post(API_URL.replace('/expenses', '/subscriptions'), subscription);
+            const response = await api.post(SUBSCRIPTIONS_URL, subscription);
             return response.data;
         } catch (error) {
             console.error('Erro ao criar subscription:', error);
@@ -71,7 +70,7 @@ export const subscriptionService = {
 
     update: async (id, subscription) => {
         try {
-            const response = await axios.put(`${API_URL.replace('/expenses', '/subscriptions')}/${id}`, subscription);
+            const response = await api.put(`${SUBSCRIPTIONS_URL}/${id}`, subscription);
             return response.data;
         } catch (error) {
             console.error('Erro ao atualizar subscription:', error);
@@ -81,7 +80,7 @@ export const subscriptionService = {
 
     delete: async (id) => {
         try {
-            await axios.delete(`${API_URL.replace('/expenses', '/subscriptions')}/${id}`);
+            await api.delete(`${SUBSCRIPTIONS_URL}/${id}`);
         } catch (error) {
             console.error('Erro ao deletar subscription:', error);
             throw error;
@@ -90,7 +89,7 @@ export const subscriptionService = {
 
     toggle: async (id) => {
         try {
-            const response = await axios.patch(`${API_URL.replace('/expenses', '/subscriptions')}/${id}/toggle`);
+            const response = await api.patch(`${SUBSCRIPTIONS_URL}/${id}/toggle`);
             return response.data;
         } catch (error) {
             console.error('Erro ao toggle subscription:', error);
@@ -100,7 +99,7 @@ export const subscriptionService = {
 
     processNow: async () => {
         try {
-            const response = await axios.post(API_URL.replace('/expenses', '/subscriptions') + '/process');
+            const response = await api.post(`${SUBSCRIPTIONS_URL}/process`);
             return response.data;
         } catch (error) {
             console.error('Erro ao processar subscriptions:', error);

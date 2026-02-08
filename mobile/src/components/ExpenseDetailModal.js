@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import {
     View,
     Text,
@@ -21,7 +21,7 @@ import CurrencyDisplay from './CurrencyDisplay';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DISMISS_THRESHOLD = 120;
 
-export default function ExpenseDetailModal({ visible, expense, onClose }) {
+export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, onDelete }) {
     const { colors } = useTheme();
     const { t, language } = useLanguage();
     const { getCurrencyInfo } = useCurrency();
@@ -65,6 +65,9 @@ export default function ExpenseDetailModal({ visible, expense, onClose }) {
     const category = normalizeCategory(expense.category);
     const categoryColor = getCategoryColor(category);
     const isSubscription = expense.description?.includes('(Subscription)');
+
+    const installmentMatch = expense.description?.match(/\((\d+)\/(\d+)\)$/);
+    const isInstallment = !!installmentMatch;
 
     const formatFullDate = (dateString) => {
         const date = new Date(dateString);
@@ -120,11 +123,19 @@ export default function ExpenseDetailModal({ visible, expense, onClose }) {
                             <Text style={styles.subscriptionBadgeText}>{t('subscriptions')}</Text>
                         </View>
                     )}
+                    {isInstallment && (
+                        <View style={styles.installmentBadge}>
+                            <Ionicons name="card-outline" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+                            <Text style={styles.installmentBadgeText}>
+                                {t('installmentOf')} {installmentMatch[1]}/{installmentMatch[2]}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Description */}
                 <Text style={styles.description}>
-                    {expense.description?.replace(' (Subscription)', '')}
+                    {expense.description?.replace(' (Subscription)', '').replace(/\s*\(\d+\/\d+\)$/, '')}
                 </Text>
 
                 {/* Amount */}
@@ -175,7 +186,48 @@ export default function ExpenseDetailModal({ visible, expense, onClose }) {
                             {getCurrencyInfo().flag} {expense.currency || 'EUR'} — {getCurrencyInfo().symbol}{parseFloat(expense.amount).toFixed(2)}
                         </Text>
                     </View>
+
+                    {isInstallment && (
+                        <>
+                            <View style={styles.separator} />
+                            <View style={styles.detailRow}>
+                                <View style={styles.detailLabelRow}>
+                                    <Ionicons name="card-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                                    <Text style={styles.detailLabel}>{t('installment')}</Text>
+                                </View>
+                                <Text style={styles.detailValue}>
+                                    {installmentMatch[1]} / {installmentMatch[2]} — {t('totalValue')}: {getCurrencyInfo().symbol}{(parseFloat(expense.amount) * parseInt(installmentMatch[2])).toFixed(2)}
+                                </Text>
+                            </View>
+                        </>
+                    )}
                 </View>
+
+                {/* Action Buttons */}
+                {(onEdit || onDelete) && (
+                    <View style={styles.actionButtons}>
+                        {onEdit && (
+                            <TouchableOpacity
+                                style={styles.editButton}
+                                onPress={() => onEdit(expense)}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="create-outline" size={20} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
+                                <Text style={styles.editButtonText}>{t('edit')}</Text>
+                            </TouchableOpacity>
+                        )}
+                        {onDelete && (
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={() => onDelete(expense)}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="trash-outline" size={20} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
+                                <Text style={styles.deleteButtonText}>{t('delete')}</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
 
             </Animated.View>
         </Modal>
@@ -237,6 +289,20 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
         fontFamily: fontFamily.semibold,
         color: colors.primary,
     },
+    installmentBadge: {
+        marginTop: spacing.sm,
+        backgroundColor: colors.primaryBg,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.xl,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    installmentBadgeText: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.semibold,
+        color: colors.primary,
+    },
     description: {
         fontSize: fontSize.xxl,
         fontFamily: fontFamily.bold,
@@ -283,5 +349,38 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
     separator: {
         height: 1,
         backgroundColor: colors.border,
+    },
+    actionButtons: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: spacing.md,
+    },
+    editButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        paddingVertical: spacing.lg,
+        borderRadius: borderRadius.lg,
+    },
+    editButtonText: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.textWhite,
+    },
+    deleteButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.error,
+        paddingVertical: spacing.lg,
+        borderRadius: borderRadius.lg,
+    },
+    deleteButtonText: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.textWhite,
     },
 });

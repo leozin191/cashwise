@@ -13,16 +13,12 @@ export default function CurrencyDisplay({ amountInEUR, originalCurrency, style, 
             try {
                 let finalAmount;
 
-                // Se tem moeda original e é diferente de EUR
                 if (originalCurrency && originalCurrency !== 'EUR') {
-                    // Converte de moeda original para EUR primeiro
                     finalAmount = await currencyService.convertToEUR(amountInEUR, originalCurrency);
                 } else {
-                    // Já está em EUR
                     finalAmount = amountInEUR;
                 }
 
-                // Agora converte de EUR para moeda selecionada
                 const converted = await currencyService.convert(finalAmount, currency);
                 const currencyInfo = getCurrencyByCode(currency);
 

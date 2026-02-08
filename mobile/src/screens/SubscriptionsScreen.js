@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     Modal,
     TextInput,
     Alert,
@@ -17,8 +18,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
-import { CATEGORIES, normalizeCategory } from '../constants/categories';
-import { CURRENCIES } from '../constants/currencies';
+import { normalizeCategory } from '../constants/categories';
 import CategoryIcon from '../components/CategoryIcon';
 import { subscriptionService, expenseService } from '../services/api';
 import FadeIn from '../components/FadeIn';
@@ -36,7 +36,6 @@ export default function SubscriptionsScreen() {
     const [showModal, setShowModal] = useState(false);
     const [editingSub, setEditingSub] = useState(null);
 
-    // Form fields
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('Entertainment');
@@ -115,7 +114,7 @@ export default function SubscriptionsScreen() {
             Alert.alert(t('attention'), t('enterDescription'));
             return;
         }
-        if (!amount || parseFloat(amount) <= 0) {
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
             Alert.alert(t('attention'), t('enterValidAmount'));
             return;
         }
@@ -137,7 +136,6 @@ export default function SubscriptionsScreen() {
             } else {
                 await subscriptionService.create(data);
 
-                // Pergunta se quer criar a despesa deste mês
                 Alert.alert(
                     t('createCurrentExpense'),
                     t('createCurrentExpenseHint'),
@@ -290,7 +288,11 @@ export default function SubscriptionsScreen() {
             {/* Modal Adicionar/Editar */}
             <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
                 <View style={styles.modalOverlay}>
+                    <TouchableWithoutFeedback onPress={() => setShowModal(false)}>
+                        <View style={styles.overlayTouchArea} />
+                    </TouchableWithoutFeedback>
                     <View style={styles.modal}>
+                        <View style={styles.handleBar} />
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>
                                 {editingSub ? t('editSubscription') : t('addSubscription')}
@@ -309,6 +311,7 @@ export default function SubscriptionsScreen() {
                                 placeholderTextColor={colors.textLighter}
                                 value={description}
                                 onChangeText={setDescription}
+                                maxLength={200}
                             />
 
                             {/* Valor */}
@@ -448,6 +451,8 @@ const createStyles = (colors) => StyleSheet.create({
     },
     addButtonText: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.primary },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    overlayTouchArea: { flex: 1 },
+    handleBar: { width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
     modal: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xxxl, borderTopRightRadius: borderRadius.xxxl, maxHeight: '85%' },
     modalHeader: {
         flexDirection: 'row',

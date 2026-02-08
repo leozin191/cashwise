@@ -1,43 +1,32 @@
-// ========================================
-// CORES
-// ========================================
 export const colors = {
-    // Primárias
     primary: '#4F46E5',
     primaryLight: '#818CF8',
     primaryDark: '#3730A3',
     primaryBg: 'rgba(79, 70, 229, 0.12)',
 
-    // Gradientes
     primaryGradientStart: '#6366F1',
     primaryGradientEnd: '#4F46E5',
 
-    // Secundárias
     secondary: '#EC4899',
 
-    // Status
     success: '#10B981',
     error: '#EF4444',
     warning: '#F59E0B',
     info: '#3B82F6',
 
-    // Backgrounds
     background: '#F8F9FA',
     surface: '#FFFFFF',
     overlay: 'rgba(0, 0, 0, 0.5)',
 
-    // Textos
     text: '#1F2937',
     textLight: '#6B7280',
     textLighter: '#9CA3AF',
     textWhite: '#FFFFFF',
     textDisabled: '#D1D5DB',
 
-    // Borders
     border: '#E5E7EB',
     borderLight: '#F3F4F6',
 
-    // Categorias (já existentes)
     categoryFood: '#EF4444',
     categoryTransport: '#3B82F6',
     categoryHousing: '#F59E0B',
@@ -48,9 +37,6 @@ export const colors = {
     categoryOther: '#6B7280',
 };
 
-// ========================================
-// ESPAÇAMENTOS
-// ========================================
 export const spacing = {
     xs: 4,
     sm: 8,
@@ -62,9 +48,6 @@ export const spacing = {
     huge: 48,
 };
 
-// ========================================
-// BORDAS ARREDONDADAS
-// ========================================
 export const borderRadius = {
     xs: 6,
     sm: 8,
@@ -73,12 +56,9 @@ export const borderRadius = {
     xl: 20,
     xxl: 25,
     xxxl: 30,
-    full: 9999, // Círculo perfeito
+    full: 9999,
 };
 
-// ========================================
-// TAMANHOS DE FONTE
-// ========================================
 export const fontSize = {
     xs: 11,
     sm: 12,
@@ -94,9 +74,6 @@ export const fontSize = {
     ultra: 48,
 };
 
-// ========================================
-// FONT WEIGHTS
-// ========================================
 export const fontWeight = {
     light: '300',
     regular: '400',
@@ -105,9 +82,6 @@ export const fontWeight = {
     bold: '700',
 };
 
-// ========================================
-// FONT FAMILIES (Inter)
-// ========================================
 export const fontFamily = {
     regular: 'Inter_400Regular',
     medium: 'Inter_500Medium',
@@ -115,9 +89,6 @@ export const fontFamily = {
     bold: 'Inter_700Bold',
 };
 
-// ========================================
-// TYPOGRAPHY (combos prontos)
-// ========================================
 export const typography = {
     h1: { fontFamily: fontFamily.bold, fontSize: fontSize.xxxl },
     h2: { fontFamily: fontFamily.bold, fontSize: fontSize.xxl },
@@ -130,9 +101,6 @@ export const typography = {
     label: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
 };
 
-// ========================================
-// SOMBRAS
-// ========================================
 export const shadows = {
     none: {
         shadowColor: 'transparent',
@@ -163,7 +131,6 @@ export const shadows = {
         elevation: 4,
     },
     colored: {
-        // Para botões coloridos (ex: botão +)
         shadowColor: '#4F46E5',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
@@ -172,79 +139,54 @@ export const shadows = {
     },
 };
 
-// ========================================
-// TAMANHOS COMUNS
-// ========================================
 export const sizes = {
-    // Botões
     buttonHeight: 48,
     buttonHeightSmall: 40,
     buttonHeightLarge: 56,
-
-    // Inputs
     inputHeight: 48,
-
-    // FAB (Floating Action Button)
     fabSize: 64,
-
-    // Ícones
     iconSmall: 18,
     iconMedium: 24,
     iconLarge: 32,
     iconHuge: 48,
-
-    // Header
     headerHeight: 60,
 };
 
-// ========================================
-// ANIMAÇÕES (duração em ms)
-// ========================================
 export const animations = {
     fast: 150,
     normal: 300,
     slow: 500,
 };
-// ========================================
-// DARK THEME
-// ========================================
+
 export const darkColors = {
-    // Primárias
     primary: '#818CF8',
     primaryLight: '#A5B4FC',
     primaryDark: '#6366F1',
     primaryBg: 'rgba(129, 140, 248, 0.15)',
 
-    // Gradientes
     primaryGradientStart: '#818CF8',
     primaryGradientEnd: '#6366F1',
 
-    // Secundárias
     secondary: '#F472B6',
 
-    // Status
     success: '#34D399',
     error: '#F87171',
     warning: '#FBBF24',
     info: '#60A5FA',
 
-    // Backgrounds
     background: '#0F172A',
     surface: '#1E293B',
     overlay: 'rgba(0, 0, 0, 0.7)',
 
-    // Textos
     text: '#F1F5F9',
     textLight: '#CBD5E1',
     textLighter: '#94A3B8',
     textWhite: '#FFFFFF',
     textDisabled: '#475569',
 
-    // Borders
     border: '#334155',
     borderLight: '#1E293B',
 
-    // Categorias
     categoryFood: '#EF4444',
     categoryTransport: '#3B82F6',
     categoryHousing: '#F59E0B',

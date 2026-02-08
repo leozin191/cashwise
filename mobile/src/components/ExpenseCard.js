@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { normalizeCategory } from '../constants/categories';
 import { formatDate } from '../utils/helpers';
 import { spacing, fontSize, fontFamily, borderRadius } from '../constants/theme';
@@ -15,6 +16,12 @@ export default function ExpenseCard({ expense }) {
     const { language } = useLanguage();
     const styles = createStyles(colors);
 
+    const installmentMatch = expense.description?.match(/\((\d+)\/(\d+)\)$/);
+    const isInstallment = !!installmentMatch;
+    const displayDescription = isInstallment
+        ? expense.description.replace(/\s*\(\d+\/\d+\)$/, '')
+        : expense.description;
+
     return (
         <View style={styles.card}>
             <View style={styles.left}>
@@ -27,11 +34,19 @@ export default function ExpenseCard({ expense }) {
                 </View>
                 <View style={styles.textContainer}>
                     <Text style={styles.description} numberOfLines={1}>
-                        {expense.description}
+                        {displayDescription}
                     </Text>
                     <Text style={styles.date}>
                         {formatDate(expense.date, language)}
                     </Text>
+                    {isInstallment && (
+                        <View style={styles.installmentBadge}>
+                            <Ionicons name="card-outline" size={10} color={colors.primary} />
+                            <Text style={styles.installmentBadgeText}>
+                                {installmentMatch[1]}/{installmentMatch[2]}
+                            </Text>
+                        </View>
+                    )}
                 </View>
             </View>
             <View>
@@ -99,5 +114,21 @@ const createStyles = (colors) => StyleSheet.create({
         fontFamily: fontFamily.regular,
         color: colors.textLight,
         marginTop: spacing.xs,
+    },
+    installmentBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.primaryBg,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 2,
+        borderRadius: borderRadius.sm,
+        marginTop: spacing.xs,
+        alignSelf: 'flex-start',
+        gap: 3,
+    },
+    installmentBadgeText: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.semibold,
+        color: colors.primary,
     },
 });

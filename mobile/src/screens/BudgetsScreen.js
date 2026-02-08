@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { SwipeListView } from 'react-native-swipe-list-view';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -40,6 +41,7 @@ export default function BudgetsScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [convertedBudgets, setConvertedBudgets] = useState({});
     const [convertedSpent, setConvertedSpent] = useState({});
+    const [editingBudget, setEditingBudget] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -91,7 +93,7 @@ export default function BudgetsScreen() {
     };
 
     const handleSaveBudget = async () => {
-        if (!selectedCategory || !limitValue) {
+        if (!selectedCategory || !limitValue || isNaN(parseFloat(limitValue)) || parseFloat(limitValue) <= 0) {
             Alert.alert(t('attention'), t('enterLimit'));
             return;
         }
@@ -99,12 +101,28 @@ export default function BudgetsScreen() {
         const success = await saveBudget(selectedCategory, parseFloat(limitValue), currency);
 
         if (success) {
-            Alert.alert(t('success'), t('budgetSaved'));
+            Alert.alert(t('success'), editingBudget ? t('budgetUpdated') : t('budgetSaved'));
             setShowModal(false);
             setSelectedCategory('');
             setLimitValue('');
+            setEditingBudget(null);
             setTimeout(() => loadData(), 500);
         }
+    };
+
+    const handleEditBudget = (category, budget) => {
+        const convertedLimit = convertedBudgets[category] || budget.limit;
+        setEditingBudget({ category, limit: convertedLimit, currency: budget.currency });
+        setSelectedCategory(category);
+        setLimitValue(convertedLimit.toFixed(0));
+        setShowModal(true);
+    };
+
+    const handleCloseModal = () => {
+        setShowModal(false);
+        setSelectedCategory('');
+        setLimitValue('');
+        setEditingBudget(null);
     };
 
     const handleDeleteBudget = (category) => {
@@ -163,72 +181,106 @@ export default function BudgetsScreen() {
                         <Text style={styles.emptySubtext}>{t('addBudgetHint')}</Text>
                     </View>
                 ) : (
-                    Object.entries(budgets).map(([category, budget]) => {
-                        const spent = calculateSpent(category);
-                        const convertedLimit = convertedBudgets[category] || budget.limit;
-                        const progress = calculateProgress(spent, convertedLimit);
-                        const level = getAlertLevel(progress);
-                        const remaining = convertedLimit - spent;
+                    <SwipeListView
+                        data={Object.entries(budgets).map(([category, budget]) => ({
+                            key: category,
+                            category,
+                            budget,
+                        }))}
+                        scrollEnabled={false}
+                        renderItem={({ item }) => {
+                            const { category, budget } = item;
+                            const spent = calculateSpent(category);
+                            const convertedLimit = convertedBudgets[category] || budget.limit;
+                            const progress = calculateProgress(spent, convertedLimit);
+                            const level = getAlertLevel(progress);
+                            const remaining = convertedLimit - spent;
 
-                        return (
-                            <TouchableOpacity
-                                key={category}
-                                style={styles.budgetCard}
-                                onPress={() => handleDeleteBudget(category)}
-                                activeOpacity={0.7}
-                            >
-                                <View style={styles.budgetHeader}>
-                                    <View style={styles.budgetLeft}>
-                                        <CategoryIcon category={category} size={24} color={colors.primary} />
-                                        <Text style={styles.budgetCategory}>{t(`categories.${category}`)}</Text>
-                                    </View>
-                                    <View style={styles.budgetRight}>
-                                        <Text style={styles.budgetLimit}>
-                                            {getCurrencyInfo().symbol}{convertedLimit.toFixed(0)}
-                                        </Text>
-                                        <View style={[
-                                            styles.budgetPercentageBadge,
-                                            { backgroundColor: getProgressColor(level) + '20' }
-                                        ]}>
-                                            <Text style={[
-                                                styles.budgetPercentageText,
-                                                { color: getProgressColor(level) }
-                                            ]}>
-                                                {progress.toFixed(0)}%
+                            return (
+                                <TouchableOpacity
+                                    activeOpacity={1}
+                                    onPress={() => handleEditBudget(category, budget)}
+                                    style={styles.budgetCard}
+                                >
+                                    <View style={styles.budgetHeader}>
+                                        <View style={styles.budgetLeft}>
+                                            <CategoryIcon category={category} size={24} color={colors.primary} />
+                                            <Text style={styles.budgetCategory}>{t(`categories.${category}`)}</Text>
+                                        </View>
+                                        <View style={styles.budgetRight}>
+                                            <Text style={styles.budgetLimit}>
+                                                {getCurrencyInfo().symbol}{convertedLimit.toFixed(0)}
                                             </Text>
+                                            <View style={[
+                                                styles.budgetPercentageBadge,
+                                                { backgroundColor: getProgressColor(level) + '20' }
+                                            ]}>
+                                                <Text style={[
+                                                    styles.budgetPercentageText,
+                                                    { color: getProgressColor(level) }
+                                                ]}>
+                                                    {progress.toFixed(0)}%
+                                                </Text>
+                                            </View>
                                         </View>
                                     </View>
-                                </View>
 
-                                <View style={styles.progressBarBg}>
-                                    <View
-                                        style={[
-                                            styles.progressBar,
-                                            {
-                                                width: `${Math.min(progress, 100)}%`,
-                                                backgroundColor: getProgressColor(level),
-                                            },
-                                        ]}
-                                    />
-                                </View>
+                                    <View style={styles.progressBarBg}>
+                                        <View
+                                            style={[
+                                                styles.progressBar,
+                                                {
+                                                    width: `${Math.min(progress, 100)}%`,
+                                                    backgroundColor: getProgressColor(level),
+                                                },
+                                            ]}
+                                        />
+                                    </View>
 
-                                <View style={styles.budgetInfo}>
-                                    <Text style={styles.budgetSpent}>
-                                        {t('spent')}: {getCurrencyInfo().symbol}{spent.toFixed(2)}
-                                    </Text>
-                                    <Text
-                                        style={[
-                                            styles.budgetRemaining,
-                                            remaining < 0 && { color: '#F44336' },
-                                        ]}
-                                    >
-                                        {remaining >= 0 ? t('remaining') : t('exceeded')}:{' '}
-                                        {getCurrencyInfo().symbol}{Math.abs(remaining).toFixed(2)}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })
+                                    <View style={styles.budgetInfo}>
+                                        <Text style={styles.budgetSpent}>
+                                            {t('spent')}: {getCurrencyInfo().symbol}{spent.toFixed(2)}
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.budgetRemaining,
+                                                remaining < 0 && { color: '#F44336' },
+                                            ]}
+                                        >
+                                            {remaining >= 0 ? t('remaining') : t('exceeded')}:{' '}
+                                            {getCurrencyInfo().symbol}{Math.abs(remaining).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        }}
+                        renderHiddenItem={({ item }) => (
+                            <View style={styles.swipeHiddenRow}>
+                                <TouchableOpacity
+                                    style={styles.swipeEditButton}
+                                    onPress={() => handleEditBudget(item.category, item.budget)}
+                                >
+                                    <Ionicons name="create-outline" size={24} color="#FFF" />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.swipeDeleteButton}
+                                    onPress={() => handleDeleteBudget(item.category)}
+                                >
+                                    <Ionicons name="trash-outline" size={24} color="#FFF" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                        leftOpenValue={70}
+                        rightOpenValue={-70}
+                        disableLeftSwipe={false}
+                        disableRightSwipe={false}
+                        directionalDistanceChangeThreshold={10}
+                        swipeToOpenPercent={20}
+                        closeOnRowPress={true}
+                        closeOnRowBeginSwipe={true}
+                        friction={50}
+                        tension={40}
+                    />
                 )}
 
                 <TouchableOpacity
@@ -246,24 +298,44 @@ export default function BudgetsScreen() {
                 visible={showModal}
                 animationType="slide"
                 transparent={true}
-                onRequestClose={() => setShowModal(false)}
+                onRequestClose={handleCloseModal}
             >
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={{ flex: 1 }}
                 >
-                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                        <View style={styles.modalOverlay}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback onPress={handleCloseModal}>
+                            <View style={styles.overlayTouchArea} />
+                        </TouchableWithoutFeedback>
+                        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                             <View style={styles.modal}>
+                                <View style={styles.handleBar} />
                                 <View style={styles.modalHeader}>
-                                    <Text style={styles.modalTitle}>{t('addBudget')}</Text>
-                                    <TouchableOpacity onPress={() => setShowModal(false)}>
+                                    <Text style={styles.modalTitle}>
+                                        {editingBudget ? t('editBudget') : t('addBudget')}
+                                    </Text>
+                                    <TouchableOpacity onPress={handleCloseModal}>
                                         <Text style={styles.closeButton}>✕</Text>
                                     </TouchableOpacity>
                                 </View>
 
                                 <View style={styles.modalContent}>
                                     <Text style={styles.label}>{t('selectCategory')}</Text>
+                                    {editingBudget ? (
+                                        <View style={styles.categoriesRow}>
+                                            <View style={[styles.categoryOption, styles.categoryOptionActive]}>
+                                                <CategoryIcon
+                                                    category={editingBudget.category}
+                                                    size={20}
+                                                    color={colors.textWhite}
+                                                />
+                                                <Text style={[styles.categoryOptionText, { color: colors.textWhite }]}>
+                                                    {t(`categories.${editingBudget.category}`)}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ) : (
                                     <ScrollView
                                         horizontal
                                         showsHorizontalScrollIndicator={false}
@@ -296,6 +368,7 @@ export default function BudgetsScreen() {
                                             ))}
                                         </View>
                                     </ScrollView>
+                                    )}
 
                                     <Text style={styles.label}>{t('monthlyLimit')}</Text>
                                     <View style={styles.amountContainer}>
@@ -318,8 +391,8 @@ export default function BudgetsScreen() {
                                     </TouchableOpacity>
                                 </View>
                             </View>
-                        </View>
-                    </TouchableWithoutFeedback>
+                        </TouchableWithoutFeedback>
+                    </View>
                 </KeyboardAvoidingView>
             </Modal>
         </View>
@@ -433,6 +506,32 @@ const createStyles = (colors) =>
             fontFamily: fontFamily.regular,
             color: colors.textLight,
         },
+        swipeHiddenRow: {
+            flex: 1,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginHorizontal: spacing.xl,
+            marginBottom: spacing.lg,
+        },
+        swipeEditButton: {
+            backgroundColor: colors.primary,
+            width: 70,
+            height: '100%',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderTopLeftRadius: borderRadius.lg,
+            borderBottomLeftRadius: borderRadius.lg,
+        },
+        swipeDeleteButton: {
+            backgroundColor: colors.error || '#F44336',
+            width: 70,
+            height: '100%',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderTopRightRadius: borderRadius.lg,
+            borderBottomRightRadius: borderRadius.lg,
+        },
         addButton: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -455,6 +554,18 @@ const createStyles = (colors) =>
             flex: 1,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             justifyContent: 'flex-end',
+        },
+        overlayTouchArea: {
+            flex: 1,
+        },
+        handleBar: {
+            width: 40,
+            height: 4,
+            backgroundColor: colors.border,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginTop: spacing.md,
+            marginBottom: spacing.xs,
         },
         modal: {
             backgroundColor: colors.surface,

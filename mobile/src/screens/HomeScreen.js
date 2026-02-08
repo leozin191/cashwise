@@ -1,24 +1,26 @@
-import React, { useState, useEffect} from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     RefreshControl,
     Alert,
     Modal,
     TextInput,
     ActivityIndicator,
+    Dimensions,
 } from 'react-native';
 
-import { PieChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-gifted-charts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { SwipeListView } from 'react-native-swipe-list-view';
 
-import { expenseService } from '../services/api';
+import { expenseService, subscriptionService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
 import ExpenseDetailModal from '../components/ExpenseDetailModal';
 import CategoryLegend from '../components/CategoryLegend';
@@ -32,12 +34,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import CurrencyDisplay from '../components/CurrencyDisplay';
 import MonthlyChart from '../components/MonthlyChart';
+import ForecastSection from '../components/ForecastSection';
 import FadeIn from '../components/FadeIn';
-import { filterByThisMonth, filterByLast30Days, filterByAll, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
+import { formatDate, filterByThisMonth, filterByLast30Days, filterByAll, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
 
 export default function HomeScreen() {
-    // Estados
     const [expenses, setExpenses] = useState([]);
+    const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
@@ -46,34 +49,36 @@ export default function HomeScreen() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
 
-    // Idioma
     const { language, changeLanguage, t } = useLanguage();
-
-    // Tema
     const { colors } = useTheme();
-
-    // Moeda
     const { currency, getCurrencyInfo } = useCurrency();
 
-    // Filtro
     const [filter, setFilter] = useState('thisMonth');
-
-    // Busca
     const [searchQuery, setSearchQuery] = useState('');
-
-    // Ordenação
-    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'highest', 'lowest'
+    const [debouncedQuery, setDebouncedQuery] = useState('');
+    const [sortBy, setSortBy] = useState('newest');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
     useEffect(() => {
         loadExpenses();
     }, []);
 
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedQuery(searchQuery);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
     const loadExpenses = async () => {
         try {
             setLoading(true);
-            const data = await expenseService.getAll();
+            const [data, subData] = await Promise.all([
+                expenseService.getAll(),
+                subscriptionService.getAll(),
+            ]);
             setExpenses(data);
+            setSubscriptions(subData);
         } catch (error) {
             Alert.alert(t('error'), t('couldNotLoad'));
             console.error(error);
@@ -108,7 +113,6 @@ export default function HomeScreen() {
         return applySorting(filtered);
     };
 
-    // Função: Aplicar ordenação
     const applySorting = (expensesToSort) => {
         switch (sortBy) {
             case 'oldest':
@@ -128,7 +132,6 @@ export default function HomeScreen() {
             .reduce((sum, exp) => sum + exp.amount, 0);
     };
 
-    // Função: Aplicar filtro de data
     const getDateFilteredExpenses = () => {
         switch (filter) {
             case 'thisMonth':
@@ -140,29 +143,40 @@ export default function HomeScreen() {
         }
     };
 
-    // Função: Aplicar busca
     const getSearchFilteredExpenses = (expensesToFilter) => {
-        if (!searchQuery.trim()) {
+        if (!debouncedQuery.trim()) {
             return expensesToFilter;
         }
 
-        const query = searchQuery.toLowerCase().trim();
-        return expensesToFilter.filter(exp =>
-            exp.description.toLowerCase().includes(query)
-        );
+        const query = debouncedQuery.toLowerCase().trim();
+        return expensesToFilter.filter(exp => {
+            if (exp.description.toLowerCase().includes(query)) return true;
+
+            const categoryTranslated = t(`categories.${exp.category}`)?.toLowerCase() || '';
+            if (categoryTranslated.includes(query)) return true;
+            if (exp.category?.toLowerCase().includes(query)) return true;
+
+            const amountStr = exp.amount?.toString() || '';
+            if (amountStr.includes(query)) return true;
+
+            const dateFormatted = formatDate(exp.date, language)?.toLowerCase() || '';
+            if (dateFormatted.includes(query)) return true;
+
+            const expCurrency = (exp.currency || 'EUR').toLowerCase();
+            if (expCurrency.includes(query)) return true;
+
+            return false;
+        });
     };
 
-    // Função: Aplicar ambos os filtros
     const getFilteredExpenses = () => {
         const dateFiltered = getDateFilteredExpenses();
         return getSearchFilteredExpenses(dateFiltered);
     };
 
-    // Despesas filtradas para usar no gráfico e cálculos
     const filteredExpenses = getFilteredExpenses();
     const filteredTotal = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-    // Recalcula chartData com despesas filtradas
     const filteredGrouped = filteredExpenses.reduce((acc, exp) => {
         const category = normalizeCategory(exp.category);
         if (!acc[category]) acc[category] = 0;
@@ -170,15 +184,19 @@ export default function HomeScreen() {
         return acc;
     }, {});
 
-    const filteredChartData = Object.entries(filteredGrouped).map(([name, value]) => ({
-        name,
-        population: value,
-        color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other,
-        legendFontColor: colors.text,
-        legendFontSize: 0,
-    }));
+    const screenWidth = Dimensions.get('window').width;
+    const chartRadius = Math.min((screenWidth - 80) / 2, 130);
+    const chartInnerRadius = Math.round(chartRadius * 0.6);
 
-    // Estatísticas
+    const filteredChartData = Object.entries(filteredGrouped)
+        .sort(([, a], [, b]) => b - a)
+        .map(([name, value]) => ({
+            value,
+            color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other,
+            onPress: () => handleCategoryPress(name),
+            _categoryName: name,
+        }));
+
     const highestExpense = getHighestExpense(filteredExpenses);
     const averagePerDay = getAveragePerDay(filteredExpenses);
     const topCategory = getTopCategory(filteredExpenses);
@@ -261,14 +279,12 @@ export default function HomeScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 {expenses.length === 0 ? (
-                    // Realmente vazio (sem despesas no banco)
                     <View style={styles.emptyState}>
                         <Ionicons name="mail-open-outline" size={64} color={colors.textLight} />
                         <Text style={styles.emptyText}>{t('noExpenses')}</Text>
                         <Text style={styles.emptySubtext}>{t('noExpensesSubtext')}</Text>
                     </View>
                 ) : filteredExpenses.length === 0 ? (
-                    // Tem despesas, mas filtro não encontrou nada
                     <View style={styles.chartSection}>
                         <View style={styles.emptyState}>
                             <Ionicons name="search-outline" size={64} color={colors.textLight} />
@@ -334,18 +350,41 @@ export default function HomeScreen() {
                                 <View style={styles.pieWrapper}>
                                     <PieChart
                                         data={filteredChartData}
-                                        width={320}
-                                        height={200}
-                                        chartConfig={{
-                                            color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                        }}
-                                        accessor="population"
-                                        backgroundColor="transparent"
-                                        paddingLeft="80"
-                                        center={[0, 0]}
-                                        absolute
-                                        hasLegend={false}
+                                        donut
+                                        radius={chartRadius}
+                                        innerRadius={chartInnerRadius}
+                                        innerCircleColor={colors.surface}
+                                        centerLabelComponent={() => (
+                                            <View style={styles.donutCenter}>
+                                                <CurrencyDisplay
+                                                    amountInEUR={filteredTotal}
+                                                    style={styles.donutTotal}
+                                                />
+                                                <Text style={styles.donutLabel}>{t('total')}</Text>
+                                            </View>
+                                        )}
+                                        focusOnPress
+                                        isAnimated
+                                        animationDuration={600}
                                     />
+                                </View>
+
+                                {/* Legendas dentro do card do donut */}
+                                <View style={styles.legendsDivider} />
+                                <View style={styles.legendsInline}>
+                                    <View style={styles.legendsTitleRow}>
+                                        <Ionicons name="information-circle-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.xs }} />
+                                        <Text style={styles.legendsTitle}>{t('tapToSeeDetails')}</Text>
+                                    </View>
+                                    {filteredChartData.map((item, index) => (
+                                        <CategoryLegend
+                                            key={index}
+                                            category={item._categoryName}
+                                            amount={item.value}
+                                            total={filteredTotal}
+                                            onPress={() => handleCategoryPress(item._categoryName)}
+                                        />
+                                    ))}
                                 </View>
                             </View>
                             </FadeIn>
@@ -392,27 +431,30 @@ export default function HomeScreen() {
                                 <Text style={styles.statsTitle}>{t('statistics')}</Text>
                             </View>
 
-                            <View style={styles.statsGrid}>
+                            <View style={styles.statsRow}>
                                 {/* Maior gasto */}
                                 {highestExpense && (
-                                    <View style={[styles.statCard, { borderLeftColor: colors.warning }]}>
+                                    <View style={styles.statCompact}>
+                                        <View style={[styles.statIconCircle, { backgroundColor: colors.warning + '20' }]}>
+                                            <Ionicons name="arrow-up-outline" size={16} color={colors.warning} />
+                                        </View>
                                         <Text style={styles.statLabel}>{t('highestExpense')}</Text>
                                         <CurrencyDisplay
                                             amountInEUR={highestExpense.amount}
                                             originalCurrency={highestExpense.currency}
                                             style={styles.statValue}
                                         />
-                                        <Text style={styles.statSubtext}>
+                                        <Text style={styles.statSubtext} numberOfLines={1}>
                                             {highestExpense.description}
-                                            {highestExpense.currency && highestExpense.currency !== currency && (
-                                                ` (${getCurrencyByCode(highestExpense.currency).symbol}${highestExpense.amount.toFixed(2)} ${highestExpense.currency})`
-                                            )}
                                         </Text>
                                     </View>
                                 )}
 
                                 {/* Média por dia */}
-                                <View style={[styles.statCard, { borderLeftColor: colors.primary }]}>
+                                <View style={styles.statCompact}>
+                                    <View style={[styles.statIconCircle, { backgroundColor: colors.primary + '20' }]}>
+                                        <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                                    </View>
                                     <Text style={styles.statLabel}>{t('averagePerDay')}</Text>
                                     <CurrencyDisplay
                                         amountInEUR={averagePerDay}
@@ -422,56 +464,38 @@ export default function HomeScreen() {
                                         {filteredExpenses.length} {t('expenses').toLowerCase()}
                                     </Text>
                                 </View>
+                            </View>
 
-                                {/* Categoria top */}
-                                {topCategory && (
-                                    <View style={[styles.statCard, { borderLeftColor: colors.success }]}>
+                            {/* Categoria top - full width */}
+                            {topCategory && (
+                                <View style={styles.statTopCategory}>
+                                    <View style={[styles.statIconCircle, { backgroundColor: colors.success + '20' }]}>
+                                        <Ionicons name="trophy-outline" size={16} color={colors.success} />
+                                    </View>
+                                    <View style={styles.statTopCategoryInfo}>
                                         <Text style={styles.statLabel}>{t('topCategory')}</Text>
-                                        <Text style={styles.statValue}>
+                                        <Text style={styles.statTopCategoryName}>
                                             {t(`categories.${normalizeCategory(topCategory.name)}`)}
                                         </Text>
-                                        <View style={{ flexDirection: 'row' }}>
-                                            <Text style={styles.statSubtext}>
-                                                {topCategory.percentage}% •
-                                            </Text>
-                                            <CurrencyDisplay
-                                                amountInEUR={topCategory.amount}
-                                                style={styles.statSubtext}
-                                            />
-                                        </View>
                                     </View>
-                                )}
+                                    <View style={styles.statTopCategoryBadge}>
+                                        <Text style={styles.statTopCategoryBadgeText}>{topCategory.percentage}%</Text>
+                                    </View>
+                                </View>
+                            )}
                             </View>
-                            </View>
+                        </FadeIn>
+
+                        {/* Previsão de Gastos */}
+                        <FadeIn delay={400}>
+                            <ForecastSection expenses={expenses} subscriptions={subscriptions} />
                         </FadeIn>
 
                         {/* Gráfico de Evolução Mensal */}
-                        <FadeIn delay={500}>
+                        <FadeIn delay={600}>
                             <MonthlyChart expenses={expenses} />
                         </FadeIn>
 
-                        {/* Legendas */}
-                        <FadeIn delay={700}>
-                            <View style={styles.legendsContainer}>
-                            <View style={styles.legendsTitleRow}>
-                                <Ionicons name="information-circle-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.xs }} />
-                                <Text style={styles.legendsTitle}>{t('tapToSeeDetails')}</Text>
-                            </View>
-
-                            {filteredChartData
-                                .slice()
-                                .sort((a, b) => b.population - a.population)
-                                .map((item, index) => (
-                                    <CategoryLegend
-                                        key={index}
-                                        category={item.name}
-                                        amount={item.population}
-                                        total={filteredTotal}
-                                        onPress={() => handleCategoryPress(item.name)}
-                                    />
-                                ))}
-                            </View>
-                        </FadeIn>
                     </View>
                 )}
             </ScrollView>
@@ -484,7 +508,11 @@ export default function HomeScreen() {
                 onRequestClose={() => setShowCategoryModal(false)}
             >
                 <View style={styles.modalOverlay}>
+                    <TouchableWithoutFeedback onPress={() => setShowCategoryModal(false)}>
+                        <View style={styles.overlayTouchArea} />
+                    </TouchableWithoutFeedback>
                     <View style={styles.categoryModal}>
+                        <View style={styles.handleBar} />
                         <View style={styles.categoryModalHeader}>
                             <Text style={styles.categoryModalTitle}>
                                 {selectedCategory ? t(`categories.${selectedCategory}`) : ''}
@@ -546,7 +574,7 @@ export default function HomeScreen() {
                                 keyExtractor={(item) => item.id.toString()}
                                 renderItem={({ item }) => (
                                     <TouchableOpacity
-                                        activeOpacity={0.7}
+                                        activeOpacity={1}
                                         onPress={() => {
                                             setShowCategoryModal(false);
                                             setTimeout(() => setDetailExpense(item), 300);
@@ -585,6 +613,12 @@ export default function HomeScreen() {
                                 rightOpenValue={-70}
                                 disableLeftSwipe={false}
                                 disableRightSwipe={false}
+                                directionalDistanceChangeThreshold={10}
+                                swipeToOpenPercent={20}
+                                closeOnRowPress={true}
+                                closeOnRowBeginSwipe={true}
+                                friction={50}
+                                tension={40}
                             />
                         )}
                     </View>
@@ -596,6 +630,26 @@ export default function HomeScreen() {
                 visible={!!detailExpense}
                 expense={detailExpense}
                 onClose={() => setDetailExpense(null)}
+                onEdit={(expense) => {
+                    setDetailExpense(null);
+                    setTimeout(() => {
+                        setExpenseToEdit(expense);
+                        setShowAddModal(true);
+                    }, 300);
+                }}
+                onDelete={(expense) => {
+                    setDetailExpense(null);
+                    setTimeout(() => {
+                        Alert.alert(t('confirm'), t('deleteConfirm'), [
+                            { text: t('cancel'), style: 'cancel' },
+                            {
+                                text: t('delete'),
+                                style: 'destructive',
+                                onPress: () => handleDeleteExpense(expense.id),
+                            },
+                        ]);
+                    }, 300);
+                }}
             />
 
             {/* Modal de Adicionar/Editar */}
@@ -735,13 +789,33 @@ const createStyles = (colors) => StyleSheet.create({
     pieWrapper: {
         alignItems: 'center',
         justifyContent: 'center',
+        paddingVertical: spacing.md,
     },
-    legendsContainer: {
-        backgroundColor: colors.surface,
-        marginHorizontal: spacing.xl,
-        padding: spacing.lg,
-        borderRadius: borderRadius.xl,
-        ...shadows.small,
+    donutCenter: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    donutTotal: {
+        fontSize: fontSize.xl,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
+    },
+    donutLabel: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.medium,
+        color: colors.textLight,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginTop: 2,
+    },
+    legendsDivider: {
+        height: 1,
+        backgroundColor: colors.border,
+        marginTop: spacing.lg,
+        marginBottom: spacing.md,
+    },
+    legendsInline: {
+        width: '100%',
     },
     legendsTitleRow: {
         flexDirection: 'row',
@@ -758,6 +832,18 @@ const createStyles = (colors) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.overlay,
         justifyContent: 'flex-end',
+    },
+    overlayTouchArea: {
+        flex: 1,
+    },
+    handleBar: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: spacing.md,
+        marginBottom: spacing.xs,
     },
     categoryModal: {
         backgroundColor: colors.surface,
@@ -963,33 +1049,70 @@ const createStyles = (colors) => StyleSheet.create({
         fontFamily: fontFamily.bold,
         color: colors.text,
     },
-    statsGrid: {
+    statsRow: {
+        flexDirection: 'row',
         gap: spacing.md,
+        marginBottom: spacing.md,
     },
-    statCard: {
+    statCompact: {
+        flex: 1,
         backgroundColor: colors.background,
         padding: spacing.lg,
         borderRadius: borderRadius.md,
-        borderLeftWidth: 3,
-        borderLeftColor: colors.primary,
+        alignItems: 'flex-start',
+    },
+    statIconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: borderRadius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.sm,
     },
     statLabel: {
         fontSize: fontSize.xs,
-        fontFamily: fontFamily.semibold,
+        fontFamily: fontFamily.medium,
         color: colors.textLight,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: spacing.xs,
     },
     statValue: {
-        fontSize: fontSize.xxl,
+        fontSize: fontSize.lg,
         fontFamily: fontFamily.bold,
-        color: colors.primary,
-        marginBottom: spacing.xs,
+        color: colors.text,
+        marginBottom: 2,
     },
     statSubtext: {
         fontSize: fontSize.sm,
         fontFamily: fontFamily.regular,
         color: colors.textLight,
+    },
+    statTopCategory: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        padding: spacing.lg,
+        borderRadius: borderRadius.md,
+    },
+    statTopCategoryInfo: {
+        flex: 1,
+        marginLeft: spacing.md,
+    },
+    statTopCategoryName: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
+    },
+    statTopCategoryBadge: {
+        backgroundColor: colors.success + '20',
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.md,
+        borderRadius: borderRadius.full,
+    },
+    statTopCategoryBadgeText: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.bold,
+        color: colors.success,
     },
 });

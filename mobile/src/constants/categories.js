@@ -1,4 +1,3 @@
-// Lista completa de categorias (Revolut style)
 export const CATEGORIES = [
     'Food',
     'Delivery',
@@ -32,7 +31,6 @@ export const CATEGORIES = [
     'Remittances',
 ];
 
-// Ícones Ionicons para cada categoria
 export const CATEGORY_ICONS = {
     Food: 'fast-food',
     Delivery: 'bicycle',
@@ -66,90 +64,48 @@ export const CATEGORY_ICONS = {
     Remittances: 'globe',
 };
 
-// Cores para cada categoria (Revolut style)
 export const CATEGORY_COLORS = {
-    Food: '#FF9800',           // Laranja
-    Delivery: '#FF5722',       // Laranja avermelhado
-    Groceries: '#4CAF50',      // Verde
-    Shopping: '#E91E63',       // Rosa
-    Restaurants: '#FF5722',    // Laranja
-    Transport: '#9C27B0',      // Roxo
-    Travel: '#2196F3',         // Azul
-    Entertainment: '#F44336',  // Vermelho
-    Health: '#00BCD4',         // Ciano
-    Services: '#7E57C2',       // Roxo claro
-    General: '#4CAF50',        // Verde
-    Utilities: '#9E9E9E',      // Cinza
-    Cash: '#00BCD4',           // Ciano
-    Transfers: '#5E72E4',      // Azul
-    Insurance: '#FFC107',      // Amarelo
-    Wealth: '#4CAF50',         // Verde
-    Refund: '#00BCD4',         // Ciano
-    Cashback: '#FFEB3B',       // Amarelo claro
-    ChildAllowance: '#E91E63', // Rosa
-    Investment: '#7E57C2',     // Roxo
-    Loan: '#00BCD4',           // Ciano
-    Credit: '#00BCD4',         // Ciano
-    Savings: '#FF9800',        // Laranja
-    Donation: '#F44336',       // Vermelho
-    Salary: '#2196F3',         // Azul
-    Gift: '#9C27B0',           // Roxo
-    TopUps: '#2196F3',         // Azul
-    NetSales: '#00BCD4',       // Ciano
-    Interest: '#CDDC39',       // Verde limão
-    Remittances: '#7E57C2',    // Roxo
-    Other: '#9E9E9E',          // Cinza
+    Food: '#FF9800',
+    Delivery: '#FF5722',
+    Groceries: '#4CAF50',
+    Shopping: '#E91E63',
+    Restaurants: '#FF5722',
+    Transport: '#9C27B0',
+    Travel: '#2196F3',
+    Entertainment: '#F44336',
+    Health: '#00BCD4',
+    Services: '#7E57C2',
+    General: '#4CAF50',
+    Utilities: '#9E9E9E',
+    Cash: '#00BCD4',
+    Transfers: '#5E72E4',
+    Insurance: '#FFC107',
+    Wealth: '#4CAF50',
+    Refund: '#00BCD4',
+    Cashback: '#FFEB3B',
+    ChildAllowance: '#E91E63',
+    Investment: '#7E57C2',
+    Loan: '#00BCD4',
+    Credit: '#00BCD4',
+    Savings: '#FF9800',
+    Donation: '#F44336',
+    Salary: '#2196F3',
+    Gift: '#9C27B0',
+    TopUps: '#2196F3',
+    NetSales: '#00BCD4',
+    Interest: '#CDDC39',
+    Remittances: '#7E57C2',
+    Other: '#9E9E9E',
 };
 
-// Emojis (backup se não quiser usar ícones)
-export const CATEGORY_EMOJIS = {
-    Food: '🍔',
-    Delivery: '🛵',
-    Groceries: '🛒',
-    Shopping: '🛍️',
-    Restaurants: '🍽️',
-    Transport: '🚌',
-    Travel: '✈️',
-    Entertainment: '🎮',
-    Health: '💊',
-    Services: '🔧',
-    General: '💰',
-    Utilities: '🏠',
-    Cash: '💵',
-    Transfers: '↔️',
-    Insurance: '☂️',
-    Wealth: '💎',
-    Refund: '🔄',
-    Cashback: '💸',
-    ChildAllowance: '👶',
-    Investment: '📈',
-    Loan: '💳',
-    Credit: '💳',
-    Savings: '🏦',
-    Donation: '❤️',
-    Salary: '💰',
-    Gift: '🎁',
-    TopUps: '📱',
-    NetSales: '💰',
-    Interest: '%',
-    Remittances: '🌍',
-    Other: '📌',
-};
-
-// Funções helper
 export function getCategoryIcon(category) {
     return CATEGORY_ICONS[category] || CATEGORY_ICONS.General;
-}
-
-export function getCategoryEmoji(category) {
-    return CATEGORY_EMOJIS[category] || CATEGORY_EMOJIS.Other;
 }
 
 export function getCategoryColor(category) {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS.Other;
 }
 
-// Mapeamento PT → EN (para backend)
 export const CATEGORY_MAP_PT_TO_EN = {
     'Lazer': 'Entertainment',
     'Alimentação': 'Groceries',
@@ -160,7 +116,6 @@ export const CATEGORY_MAP_PT_TO_EN = {
     'Saúde': 'Health',
     'Educação': 'Services',
     'Comida': 'Food',
-
 };
 
 export function normalizeCategory(category) {

@@ -1,22 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     Switch,
     Alert,
     Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { CURRENCIES } from '../constants/currencies';
 import currencyService from '../services/currency';
+import { expenseService, subscriptionService } from '../services/api';
+import { getBudgets } from '../utils/budgets';
 
 export default function SettingsScreen() {
     const { language, changeLanguage, t } = useLanguage();
@@ -37,12 +44,11 @@ export default function SettingsScreen() {
             const timestamp = currencyService.getLastUpdateTimestamp();
             setLastUpdate(timestamp);
 
-            // Pega taxa atual da moeda selecionada
             if (currency !== 'EUR') {
                 const rate = await currencyService.getRate(currency);
                 setCurrentRate(rate);
             } else {
-                setCurrentRate(1); // EUR para EUR = 1
+                setCurrentRate(1);
             }
         } catch (error) {
             console.error('Error loading exchange rate info:', error);
@@ -94,12 +100,170 @@ export default function SettingsScreen() {
         );
     };
 
-    const handleExportBackup = () => {
-        Alert.alert(t('success'), t('featureInDev'));
+    const handleExportCSV = async () => {
+        try {
+            const expenses = await expenseService.getAll();
+            if (expenses.length === 0) {
+                Alert.alert(t('attention'), t('noExpensesToExport'));
+                return;
+            }
+
+            const header = 'Date,Description,Category,Amount,Currency\n';
+            const sanitizeCSV = (val) => {
+                const str = String(val);
+                if (/^[=+\-@\t\r]/.test(str)) return `'${str}`;
+                return str;
+            };
+            const rows = expenses.map(exp => {
+                const desc = `"${sanitizeCSV((exp.description || '').replace(/"/g, '""'))}"`;
+                return `${exp.date},${desc},${sanitizeCSV(exp.category || '')},${exp.amount},${exp.currency || 'EUR'}`;
+            }).join('\n');
+
+            const csv = header + rows;
+            const today = new Date().toISOString().split('T')[0];
+            const filePath = `${FileSystem.documentDirectory}cashwise-expenses-${today}.csv`;
+
+            await FileSystem.writeAsStringAsync(filePath, csv, { encoding: 'utf8' });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(filePath, { mimeType: 'text/csv' });
+            } else {
+                Alert.alert(t('error'), t('sharingNotAvailable'));
+            }
+        } catch (error) {
+            console.error('Export CSV error:', error);
+            Alert.alert(t('error'), t('exportFailed'));
+        }
     };
 
-    const handleImportBackup = () => {
-        Alert.alert(t('success'), t('featureInDev'));
+    const handleFullBackup = async () => {
+        try {
+            const expenses = await expenseService.getAll();
+            let subscriptions = [];
+            try { subscriptions = await subscriptionService.getAll(); } catch (e) {}
+            const budgets = await getBudgets();
+
+            const langSetting = await AsyncStorage.getItem('@language');
+            const currSetting = await AsyncStorage.getItem('@currency');
+            const themeSetting = await AsyncStorage.getItem('@theme');
+
+            const backup = {
+                version: 1,
+                exportDate: new Date().toISOString(),
+                expenses,
+                subscriptions,
+                budgets,
+                settings: {
+                    language: langSetting,
+                    currency: currSetting,
+                    theme: themeSetting,
+                },
+            };
+
+            const today = new Date().toISOString().split('T')[0];
+            const filePath = `${FileSystem.documentDirectory}cashwise-backup-${today}.json`;
+
+            await FileSystem.writeAsStringAsync(filePath, JSON.stringify(backup, null, 2), {
+                encoding: 'utf8',
+            });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(filePath, { mimeType: 'application/json' });
+            } else {
+                Alert.alert(t('error'), t('sharingNotAvailable'));
+            }
+        } catch (error) {
+            console.error('Full backup error:', error);
+            Alert.alert(t('error'), t('exportFailed'));
+        }
+    };
+
+    const handleImportBackup = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: 'application/json',
+                copyToCacheDirectory: true,
+            });
+
+            if (result.canceled) return;
+
+            const fileUri = result.assets[0].uri;
+            const content = await FileSystem.readAsStringAsync(fileUri, {
+                encoding: 'utf8',
+            });
+
+            let backup;
+            try {
+                backup = JSON.parse(content);
+            } catch (e) {
+                Alert.alert(t('error'), t('invalidBackupFile'));
+                return;
+            }
+
+            if (!backup.version || !backup.expenses) {
+                Alert.alert(t('error'), t('invalidBackupFile'));
+                return;
+            }
+
+            Alert.alert(t('attention'), t('restoreConfirm'), [
+                { text: t('cancel'), style: 'cancel' },
+                {
+                    text: t('restore'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Delete existing expenses
+                            const existing = await expenseService.getAll();
+                            for (const exp of existing) {
+                                await expenseService.delete(exp.id);
+                            }
+
+                            // Restore expenses
+                            for (const exp of backup.expenses) {
+                                const { id, createdAt, updatedAt, ...data } = exp;
+                                await expenseService.create(data);
+                            }
+
+                            // Restore subscriptions
+                            if (backup.subscriptions?.length > 0) {
+                                try {
+                                    const existingSubs = await subscriptionService.getAll();
+                                    for (const sub of existingSubs) {
+                                        await subscriptionService.delete(sub.id);
+                                    }
+                                    for (const sub of backup.subscriptions) {
+                                        const { id, createdAt, updatedAt, ...data } = sub;
+                                        await subscriptionService.create(data);
+                                    }
+                                } catch (e) {
+                                    console.error('Error restoring subscriptions:', e);
+                                }
+                            }
+
+                            // Restore budgets
+                            if (backup.budgets) {
+                                await AsyncStorage.setItem('@budgets', JSON.stringify(backup.budgets));
+                            }
+
+                            // Restore settings
+                            if (backup.settings) {
+                                if (backup.settings.language) await AsyncStorage.setItem('@language', backup.settings.language);
+                                if (backup.settings.currency) await AsyncStorage.setItem('@currency', backup.settings.currency);
+                                if (backup.settings.theme) await AsyncStorage.setItem('@theme', backup.settings.theme);
+                            }
+
+                            Alert.alert(t('success'), t('restoreSuccess'));
+                        } catch (error) {
+                            console.error('Restore error:', error);
+                            Alert.alert(t('error'), t('restoreFailed'));
+                        }
+                    },
+                },
+            ]);
+        } catch (error) {
+            console.error('Import error:', error);
+            Alert.alert(t('error'), t('importFailed'));
+        }
     };
 
     const styles = createStyles(colors);
@@ -227,20 +391,29 @@ export default function SettingsScreen() {
                         <Text style={styles.sectionTitle}>{t('data')}</Text>
                     </View>
 
-                    {/* Exportar */}
-                    <TouchableOpacity style={styles.settingItem} onPress={handleExportBackup}>
+                    {/* Exportar CSV */}
+                    <TouchableOpacity style={styles.settingItem} onPress={handleExportCSV}>
                         <View style={styles.settingLeft}>
-                            <Text style={styles.settingLabel}>{t('exportBackup')}</Text>
-                            <Text style={styles.settingSubtext}>{t('saveToFile')}</Text>
+                            <Text style={styles.settingLabel}>{t('exportCSV')}</Text>
+                            <Text style={styles.settingSubtext}>{t('exportAsCSV')}</Text>
                         </View>
                         <Text style={styles.arrow}>›</Text>
                     </TouchableOpacity>
 
-                    {/* Importar */}
+                    {/* Backup Completo */}
+                    <TouchableOpacity style={styles.settingItem} onPress={handleFullBackup}>
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('fullBackup')}</Text>
+                            <Text style={styles.settingSubtext}>{t('exportFullBackup')}</Text>
+                        </View>
+                        <Text style={styles.arrow}>›</Text>
+                    </TouchableOpacity>
+
+                    {/* Importar Backup */}
                     <TouchableOpacity style={styles.settingItem} onPress={handleImportBackup}>
                         <View style={styles.settingLeft}>
                             <Text style={styles.settingLabel}>{t('importBackup')}</Text>
-                            <Text style={styles.settingSubtext}>Restaurar dados</Text>
+                            <Text style={styles.settingSubtext}>{t('restoreData')}</Text>
                         </View>
                         <Text style={styles.arrow}>›</Text>
                     </TouchableOpacity>
@@ -251,7 +424,7 @@ export default function SettingsScreen() {
                             <Text style={[styles.settingLabel, styles.dangerText]}>
                                 {t('clearData')}
                             </Text>
-                            <Text style={styles.settingSubtext}>Apagar todas as despesas</Text>
+                            <Text style={styles.settingSubtext}>{t('clearDataHint')}</Text>
                         </View>
                         <Text style={[styles.arrow, styles.dangerText]}>›</Text>
                     </TouchableOpacity>
@@ -288,7 +461,11 @@ export default function SettingsScreen() {
                 onRequestClose={() => setShowCurrencyModal(false)}
             >
                 <View style={styles.modalOverlay}>
+                    <TouchableWithoutFeedback onPress={() => setShowCurrencyModal(false)}>
+                        <View style={styles.overlayTouchArea} />
+                    </TouchableWithoutFeedback>
                     <View style={styles.currencyModal}>
+                        <View style={styles.handleBar} />
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>{t('selectCurrency')}</Text>
                             <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
@@ -442,6 +619,18 @@ const createStyles = (colors) =>
             flex: 1,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             justifyContent: 'flex-end',
+        },
+        overlayTouchArea: {
+            flex: 1,
+        },
+        handleBar: {
+            width: 40,
+            height: 4,
+            backgroundColor: colors.border,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginTop: spacing.md,
+            marginBottom: spacing.xs,
         },
         currencyModal: {
             backgroundColor: colors.surface,

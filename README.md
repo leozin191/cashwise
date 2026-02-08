@@ -1,4 +1,4 @@
-# 💰 CashWise — AI-Powered Personal Finance Manager
+# CashWise — AI-Powered Personal Finance Manager
 
 ![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen?style=for-the-badge&logo=springboot)
@@ -8,34 +8,38 @@
 ![AI](https://img.shields.io/badge/AI-Groq%20Llama%203.3-blue?style=for-the-badge&logo=ai)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-A full-stack personal finance application with **AI-powered expense categorization**, **automatic subscription management**, and a polished mobile experience. Built with Spring Boot + React Native (Expo).
+A full-stack personal finance application with **AI-powered expense categorization**, **automatic subscription management**, **installment tracking**, and a polished mobile experience. Built with Spring Boot + React Native (Expo).
 
-> 📱 **Current focus: Mobile app (React Native).** The web frontend (React + Vite) was the original prototype and will be updated progressively.
-
----
-
-## ✨ What Makes This Different
-
-- 🤖 **AI Categorization** — Groq's Llama 3.3-70b automatically categorizes expenses from their description
-- 🔄 **Smart Subscriptions** — Netflix, Spotify, gym — added once, expenses created automatically every month via a scheduled job
-- 📊 **Visual Insights** — Interactive pie chart, monthly evolution, per-category statistics
-- 🎯 **Budget Goals** — Set spending limits per category with real-time progress tracking
-- 🌍 **Multi-Currency** — Live exchange rates, auto-conversion between 8 currencies
-- 🌙 **Dark Mode** — System-wide dark theme across every screen and modal
-- 🌐 **Bilingual** — Full Portuguese/English support with persistent language preference
-- 📱 **Native Feel** — Smooth animations, swipe-to-dismiss modals, pull-to-refresh
+> **Current focus: Mobile app (React Native).** The web frontend (React + Vite) was the original prototype and will be updated progressively.
 
 ---
 
-## 📱 Features
+## What Makes This Different
+
+- **AI Categorization** — Groq's Llama 3.3-70b automatically categorizes expenses from their description
+- **Smart Subscriptions** — Netflix, Spotify, gym — added once, expenses created automatically every month via a scheduled job
+- **Installment Tracking** — Split purchases into 2-48 monthly installments with automatic parcel generation
+- **Visual Insights** — Interactive donut chart, color-coded bar chart with monthly evolution and trend analysis
+- **Budget Goals** — Set spending limits per category with real-time progress tracking and alerts
+- **3-Month Forecast** — Predicts upcoming costs from active subscriptions and installment parcels
+- **Multi-Currency** — Live exchange rates from 15 currencies, auto-conversion with 24h cache
+- **Dark Mode** — System-wide dark theme across every screen, modal, and chart
+- **Bilingual** — Full Portuguese/English support with persistent language preference
+- **Native Feel** — Inter font family, gradient headers, swipe gestures, smooth animations, glassmorphism effects
+
+---
+
+## Features
 
 ### Expense Management
 - Add, edit, delete expenses with AI-powered auto-categorization
-- 30 categories with custom icons (Revolut-inspired)
-- Expense detail view with full info (date, time added, category, currency)
-- Search and sort expenses (newest, oldest, highest, lowest)
+- 32 categories with Ionicon icons and unique colors
+- Installment support: split purchases into 2-48 monthly parcels
+- Expense detail modal with full info (date, time, category, currency, installment progress)
+- Search expenses across description, category, amount, and date
+- Sort: newest, oldest, highest, lowest
 - Filter by period: This Month, Last 30 Days, All Time
-- Bulk expense creation via API
+- Swipe-to-edit (left) and swipe-to-delete (right) gestures
 
 ### Subscriptions (Auto-Recurring)
 - Create subscriptions (Monthly, Weekly, Yearly)
@@ -46,30 +50,43 @@ A full-stack personal finance application with **AI-powered expense categorizati
 
 ### Budget Goals
 - Set monthly spending limits per category
-- Visual progress bars with color-coded warnings (green → yellow → red)
-- Subscription expenses automatically count toward budget limits
+- Visual progress bars with color-coded warnings (green/orange/red)
+- Automatic alerts when approaching or exceeding limits
+- Multi-currency budget support with live conversion
+- Swipe to edit/delete budgets
 
 ### Analytics & Charts
-- Interactive pie chart — tap a category to see detailed expenses
-- Monthly evolution line chart (last 6 months)
-- Statistics: highest expense, daily average, top category
+- **Donut chart** — Interactive pie chart, tap a category to see filtered expenses
+- **Bar chart** — Last 6 months with color-coded bars (green: below average, orange: above average, red: highest month)
+- **Trend badge** — Percentage change vs previous month (green = spending less, red = spending more)
+- **Tap-to-inspect** — Tap any bar to see month total and expense count
+- **Y-axis formatting** — Abbreviated values (1.2k instead of 1200)
+- **Statistics** — Highest expense, daily average, top category with percentage
+- **3-month forecast** — Projected costs from subscriptions + installments
+
+### Data Management
+- **CSV Export** — Expenses exported with formula injection protection
+- **Full Backup** — JSON export including expenses, subscriptions, budgets, and settings
+- **Import/Restore** — Restore from JSON backup file
+- Exchange rate management with manual refresh
 
 ### Settings & Preferences
 - Dark/Light theme (persisted)
-- Language: Portuguese/English (persisted)
-- Currency selection with live exchange rates
-- Manual exchange rate refresh
+- Language: Portuguese/English with flag emojis (persisted)
+- Currency selection: 15 currencies with live exchange rates (persisted)
+- Manual exchange rate refresh with 24h auto-cache
 
-### UX Polish
-- Animated splash screen
-- Cascading fade-in animations on content load
-- Swipe-to-dismiss on expense detail modal
-- Long-press to delete, tap to view details
-- Text truncation for long descriptions
+### Design System
+- Inter font family (Regular, Medium, SemiBold, Bold)
+- Linear gradient headers on all screens
+- Glassmorphism and shadow effects
+- Cascading fade-in animations
+- Swipe-to-dismiss modals with drag handles
+- Pull-to-refresh on all list screens
 
 ---
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 ### Backend
 | Tech | Purpose |
@@ -88,9 +105,12 @@ A full-stack personal finance application with **AI-powered expense categorizati
 | React Native 0.81 | Cross-platform mobile framework |
 | Expo SDK 54 | Development platform |
 | React Navigation | Bottom tab navigation |
-| react-native-chart-kit | Pie chart & line chart |
+| react-native-gifted-charts | Donut chart & bar chart |
+| react-native-swipe-list-view | Swipe gestures |
+| expo-linear-gradient | Gradient headers |
+| @expo-google-fonts/inter | Typography |
 | AsyncStorage | Local preferences persistence |
-| Axios | HTTP client |
+| Axios | HTTP client (15s timeout) |
 | Context API | State management (Theme, Language, Currency) |
 
 ### Web Frontend (Legacy Prototype)
@@ -104,7 +124,7 @@ A full-stack personal finance application with **AI-powered expense categorizati
 
 ---
 
-## 📋 API Endpoints
+## API Endpoints
 
 ### Expenses
 | Method | Endpoint | Description |
@@ -134,7 +154,7 @@ A full-stack personal finance application with **AI-powered expense categorizati
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Java 21+
@@ -169,10 +189,9 @@ cd mobile
 # Install dependencies
 npm install
 
-# Configure the API URL
-cp .env.example .env
-# Edit .env and set your computer's local IP:
-# EXPO_PUBLIC_API_URL=http://YOUR_IP:8080/api/expenses
+# Configure the API URL (use your machine's local IP)
+# Edit .env:
+# EXPO_PUBLIC_API_URL=http://YOUR_IP:8080/api
 
 # Start Expo
 npx expo start
@@ -183,95 +202,74 @@ Scan the QR code with Expo Go on your phone.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 > **Note:** The current development focus is on the **mobile app**. The web frontend (React + Vite) was the original prototype and will be updated over time.
 
 ```
 CashWise/
-│
-├── src/main/java/.../cashwise/          # ☕ Spring Boot Backend
-│   ├── config/
-│   │   └── LocaleConfig.java
-│   ├── controller/
-│   │   ├── ExpenseController.java       # Expense CRUD + AI suggestions
-│   │   └── SubscriptionController.java  # Subscription CRUD + toggle
-│   ├── dto/
-│   │   └── CategorySuggestionResponse.java
-│   ├── model/
-│   │   ├── Expense.java
-│   │   └── Subscription.java
-│   ├── repository/
-│   │   ├── ExpenseRepository.java
-│   │   └── SubscriptionRepository.java
-│   ├── scheduler/
-│   │   └── SubscriptionScheduler.java   # Daily cron job (00:05)
-│   ├── service/
-│   │   ├── AiService.java               # Groq Llama 3.3 integration
-│   │   ├── CategoryTranslationService.java
-│   │   ├── ExpenseService.java
-│   │   └── SubscriptionService.java
-│   └── CashWiseApplication.java
-│
-├── frontend/                            # 🌐 React Web App (Vite + Tailwind)
-│   └── src/                             #    ⚠️ Legacy prototype — will be updated
-│       ├── components/
-│       │   ├── Dashboard.jsx
-│       │   ├── ExpenseCard.jsx
-│       │   ├── ExpenseForm.jsx
-│       │   ├── ExpenseList.jsx
-│       │   └── FloatingButton.jsx
-│       ├── services/
-│       │   └── api.js
-│       ├── App.jsx
-│       └── main.jsx
-│
-├── mobile/                              # 📱 React Native App (Expo) — Active Development
-│   ├── App.js                           # Entry point + tab navigation
-│   └── src/
-│       ├── components/
-│       │   ├── AddExpenseModal.js        # Create/edit expense form
-│       │   ├── CategoryIcon.js          # SVG category icons
-│       │   ├── CategoryLegend.js        # Pie chart legend
-│       │   ├── CurrencyDisplay.js       # Multi-currency display
-│       │   ├── ExpenseCard.js           # Expense list item
-│       │   ├── ExpenseDetailModal.js    # Detail view (swipe-to-dismiss)
-│       │   ├── FadeIn.js               # Animation wrapper
-│       │   ├── MonthlyChart.js          # Line chart (6 months)
-│       │   └── SplashScreen.js          # Animated splash
-│       ├── constants/
-│       │   ├── categories.js            # 30 categories + icons + colors
-│       │   ├── currencies.js            # 8 supported currencies
-│       │   ├── theme.js                 # Light/dark color tokens
-│       │   └── translations.js          # PT/EN translations
-│       ├── contexts/
-│       │   ├── CurrencyContext.js        # Currency + live exchange rates
-│       │   ├── LanguageContext.js        # i18n (persisted)
-│       │   └── ThemeContext.js           # Dark mode (persisted)
-│       ├── screens/
-│       │   ├── HomeScreen.js            # Dashboard + charts + expenses
-│       │   ├── BudgetsScreen.js         # Budget goals per category
-│       │   ├── SubscriptionsScreen.js   # Recurring expense management
-│       │   └── SettingsScreen.js        # Theme, language, currency
-│       ├── services/
-│       │   ├── api.js                   # Axios client
-│       │   └── currency.js              # Exchange rate fetcher
-│       └── utils/
-│           ├── budgets.js               # AsyncStorage budget persistence
-│           └── helpers.js               # Date formatting, filters, sorting
-│
-├── .env.example                         # Backend env template
-├── mobile/.env.example                  # Mobile env template
-└── frontend/.env.example                # Web env template
+|
++-- src/main/java/.../cashwise/          # Spring Boot Backend
+|   +-- config/
+|   +-- controller/
+|   |   +-- ExpenseController.java       # Expense CRUD + AI suggestions
+|   |   +-- SubscriptionController.java  # Subscription CRUD + toggle
+|   +-- model/
+|   |   +-- Expense.java
+|   |   +-- Subscription.java
+|   +-- scheduler/
+|   |   +-- SubscriptionScheduler.java   # Daily cron job (00:05)
+|   +-- service/
+|   |   +-- AiService.java               # Groq Llama 3.3 integration
+|   |   +-- ExpenseService.java
+|   |   +-- SubscriptionService.java
+|   +-- CashWiseApplication.java
+|
++-- mobile/                              # React Native App (Expo)
+|   +-- App.js                           # Entry point + tab navigation
+|   +-- src/
+|       +-- components/
+|       |   +-- AddExpenseModal.js        # Create/edit expense form + installments
+|       |   +-- CategoryIcon.js           # Ionicon category icons
+|       |   +-- CategoryLegend.js         # Donut chart legend
+|       |   +-- CurrencyDisplay.js        # Multi-currency display
+|       |   +-- ExpenseCard.js            # Expense list item
+|       |   +-- ExpenseDetailModal.js     # Detail view (swipe-to-dismiss)
+|       |   +-- FadeIn.js                 # Animation wrapper
+|       |   +-- ForecastSection.js        # 3-month forecast
+|       |   +-- MonthlyChart.js           # Bar chart (6 months + trend)
+|       |   +-- SplashScreen.js           # Animated splash
+|       +-- constants/
+|       |   +-- categories.js             # 32 categories + icons + colors
+|       |   +-- currencies.js             # 15 supported currencies
+|       |   +-- theme.js                  # Design tokens (light/dark)
+|       |   +-- translations.js           # PT/EN translations
+|       +-- contexts/
+|       |   +-- CurrencyContext.js        # Currency + live exchange rates
+|       |   +-- LanguageContext.js         # i18n (persisted)
+|       |   +-- ThemeContext.js            # Dark mode (persisted)
+|       +-- screens/
+|       |   +-- HomeScreen.js             # Dashboard + charts + expenses
+|       |   +-- BudgetsScreen.js          # Budget goals per category
+|       |   +-- SubscriptionsScreen.js    # Recurring expense management
+|       |   +-- SettingsScreen.js         # Theme, language, currency, data
+|       +-- services/
+|       |   +-- api.js                    # Axios client (15s timeout)
+|       |   +-- currency.js               # Exchange rate fetcher (24h cache)
+|       +-- utils/
+|           +-- budgets.js                # AsyncStorage budget persistence
+|           +-- helpers.js                # Date formatting, filters, sorting
+|
++-- frontend/                            # React Web App (Legacy)
 ```
 
 ---
 
-## 🤖 How AI Categorization Works
+## How AI Categorization Works
 
 1. User creates an expense: `"Coffee at Starbucks"` without selecting a category
 2. Backend sends the description to Groq's Llama 3.3-70b with a structured prompt
-3. AI returns a category from the predefined list of 30 categories
+3. AI returns a category from the predefined list of 32 categories
 4. The response is validated against the allowed list (falls back to "General" if invalid)
 5. Expense is saved with the AI-suggested category
 
@@ -286,30 +284,38 @@ CashWise/
 
 ---
 
-## 🔒 Security Notes
+## Security Notes
 
 - API keys are loaded from environment variables (`${GROQ_API_KEY}`), never hardcoded
 - `.env` files are excluded from version control via `.gitignore`
+- CSV export includes formula injection protection (prefixes dangerous characters)
+- Input validation: NaN/negative amount checks on expenses, subscriptions, and budgets
+- Description fields have 200-character length limits
+- API client uses 15-second request timeout
 - H2 console and debug settings are enabled for development only
 - CORS is open (`*`) for development — restrict in production
 - Database files (`/data/`) are excluded from version control
 
 ---
 
-## 🛣️ Roadmap
+## Roadmap
 
-- [ ] Backup & Restore (export/import data)
+- [x] Backup & Restore (export/import data)
+- [x] Installment tracking (2-48 parcels)
+- [x] Monthly bar chart with trend analysis
+- [x] 3-month spending forecast
 - [ ] Income tracking + monthly balance
 - [ ] Push notifications for budget alerts
-- [ ] Receipt scanner (camera → AI extraction)
+- [ ] Receipt scanner (camera + AI extraction)
 - [ ] PDF monthly report export
 - [ ] JWT authentication
 - [ ] Custom categories
-- [ ] Week-over-week comparison
-- [ ] AI spending insights
+- [ ] Onboarding flow for new users
+- [ ] Offline-first mode with sync
+- [ ] Cloud backup (Google Drive / iCloud)
 
 ---
 
-## 📄 License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.

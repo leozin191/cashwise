@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
     View,
     Text,
@@ -6,12 +6,20 @@ import {
     Modal,
     ScrollView,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     TextInput,
     Alert,
+    Platform,
+    Animated,
+    PanResponder,
+    Dimensions,
+    Keyboard,
+    Switch,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { expenseService } from '../services/api';
-import { CATEGORIES, getCategoryEmoji, getCategoryColor } from '../constants/categories';
+import { CATEGORIES, getCategoryColor } from '../constants/categories';
 import { CURRENCIES } from '../constants/currencies';
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -22,7 +30,7 @@ import CategoryIcon from './CategoryIcon';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function AddExpenseModal({ visible, onClose, onSuccess, expenseToEdit = null }) {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
     const { colors } = useTheme();
     const styles = createStyles(colors);
@@ -34,6 +42,48 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
     const [selectedCurrency, setSelectedCurrency] = useState(expenseToEdit?.currency || currency);
     const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(
+        expenseToEdit?.date ? new Date(expenseToEdit.date) : new Date()
+    );
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [isInstallment, setIsInstallment] = useState(false);
+    const [installmentCount, setInstallmentCount] = useState(2);
+
+    const translateY = useRef(new Animated.Value(0)).current;
+    const SCREEN_HEIGHT = Dimensions.get('window').height;
+    const DISMISS_THRESHOLD = 100;
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: (_, gesture) => {
+                return gesture.dy > 5 && Math.abs(gesture.dy) > Math.abs(gesture.dx);
+            },
+            onPanResponderMove: (_, gesture) => {
+                if (gesture.dy > 0) {
+                    translateY.setValue(gesture.dy);
+                }
+            },
+            onPanResponderRelease: (_, gesture) => {
+                if (gesture.dy > DISMISS_THRESHOLD || gesture.vy > 0.5) {
+                    Animated.timing(translateY, {
+                        toValue: SCREEN_HEIGHT,
+                        duration: 250,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        handleClose();
+                        setTimeout(() => translateY.setValue(0), 100);
+                    });
+                } else {
+                    Animated.spring(translateY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                        bounciness: 8,
+                    }).start();
+                }
+            },
+        })
+    ).current;
 
     useEffect(() => {
         if (expenseToEdit) {
@@ -41,9 +91,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             setAmount(expenseToEdit.amount.toString());
             setCategory(expenseToEdit.category || '');
             setSelectedCurrency(expenseToEdit.currency || currency);
+            setSelectedDate(expenseToEdit.date ? new Date(expenseToEdit.date) : new Date());
         }
     }, [expenseToEdit, currency]);
-
 
     const checkBudgetAlert = async (expense) => {
         try {
@@ -90,41 +140,69 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             Alert.alert(t('attention'), t('enterDescription'));
             return;
         }
-        if (!amount || parseFloat(amount) <= 0) {
+        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
             Alert.alert(t('attention'), t('enterValidAmount'));
             return;
         }
 
         try {
             setSaving(true);
-            const expenseData = {
-                description: description.trim(),
-                amount: parseFloat(amount),
-                currency: selectedCurrency,
-                date: expenseToEdit?.date || new Date().toISOString().split('T')[0],
-                ...(category && { category }),
-            };
 
-            if (expenseToEdit) {
-                await expenseService.update(expenseToEdit.id, expenseData);
-                Alert.alert(t('success'), t('expenseUpdated'), [
+            if (!expenseToEdit && isInstallment && installmentCount > 1) {
+                const baseDate = new Date(selectedDate);
+
+                for (let i = 0; i < installmentCount; i++) {
+                    const parcelDate = new Date(baseDate);
+                    parcelDate.setMonth(parcelDate.getMonth() + i);
+
+                    const parcelData = {
+                        description: `${description.trim()} (${i + 1}/${installmentCount})`,
+                        amount: parseFloat(amount),
+                        currency: selectedCurrency,
+                        date: parcelDate.toISOString().split('T')[0],
+                        ...(category && { category }),
+                    };
+
+                    const result = await expenseService.create(parcelData);
+
+                    if (i === 0) {
+                        await checkBudgetAlert(result);
+                    }
+                }
+
+                Alert.alert(t('success'), `${installmentCount} ${t('installmentsCreated')}`, [
                     { text: 'OK', onPress: handleClose }
                 ]);
             } else {
-                const result = await expenseService.create(expenseData);
+                const expenseData = {
+                    description: description.trim(),
+                    amount: parseFloat(amount),
+                    currency: selectedCurrency,
+                    date: selectedDate.toISOString().split('T')[0],
+                    ...(category && { category }),
+                };
 
-                await checkBudgetAlert(result);
-
-                if (!category && result.category) {
-                    Alert.alert(
-                        t('success'),
-                        `${t('expenseAdded')}\n${t('aiCategorized')} ${t(`categories.${result.category}`)}`,
-                        [{ text: 'OK', onPress: handleClose }]
-                    );
-                } else {
-                    Alert.alert(t('success'), t('expenseAdded'), [
+                if (expenseToEdit) {
+                    await expenseService.update(expenseToEdit.id, expenseData);
+                    Alert.alert(t('success'), t('expenseUpdated'), [
                         { text: 'OK', onPress: handleClose }
                     ]);
+                } else {
+                    const result = await expenseService.create(expenseData);
+
+                    await checkBudgetAlert(result);
+
+                    if (!category && result.category) {
+                        Alert.alert(
+                            t('success'),
+                            `${t('expenseAdded')}\n${t('aiCategorized')} ${t(`categories.${result.category}`)}`,
+                            [{ text: 'OK', onPress: handleClose }]
+                        );
+                    } else {
+                        Alert.alert(t('success'), t('expenseAdded'), [
+                            { text: 'OK', onPress: handleClose }
+                        ]);
+                    }
                 }
             }
 
@@ -138,11 +216,17 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
     };
 
     const handleClose = () => {
+        Keyboard.dismiss();
         setDescription('');
         setAmount('');
         setCategory('');
         setShowAdvanced(false);
         setShowCurrencyPicker(false);
+        setSelectedDate(new Date());
+        setShowDatePicker(false);
+        setIsInstallment(false);
+        setInstallmentCount(2);
+        translateY.setValue(0);
         onClose();
     };
 
@@ -154,7 +238,14 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
             onRequestClose={handleClose}
         >
             <View style={styles.overlay}>
-                <View style={styles.modal}>
+                <TouchableWithoutFeedback onPress={handleClose}>
+                    <View style={styles.overlayTouchArea} />
+                </TouchableWithoutFeedback>
+                <Animated.View style={[styles.modal, { transform: [{ translateY }] }]}>
+                    {/* Drag Handle */}
+                    <View {...panResponder.panHandlers}>
+                        <View style={styles.handleBar} />
+                    </View>
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>
@@ -184,6 +275,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 placeholderTextColor={colors.textLighter}
                                 value={description}
                                 onChangeText={setDescription}
+                                maxLength={200}
                                 autoFocus
                             />
                         </View>
@@ -205,6 +297,89 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 />
                             </View>
                         </View>
+
+                        {/* Data */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>{t('date')}</Text>
+                            <TouchableOpacity
+                                style={styles.dateSelector}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Ionicons name="calendar-outline" size={20} color={colors.primary} style={{ marginRight: spacing.sm }} />
+                                <Text style={styles.dateSelectorText}>
+                                    {selectedDate.toLocaleDateString(
+                                        language === 'pt' ? 'pt-BR' : 'en-US',
+                                        { day: '2-digit', month: 'long', year: 'numeric' }
+                                    )}
+                                </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={selectedDate}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                    maximumDate={new Date()}
+                                    onChange={(event, date) => {
+                                        if (Platform.OS === 'android') {
+                                            setShowDatePicker(false);
+                                        }
+                                        if (date) {
+                                            setSelectedDate(date);
+                                        }
+                                    }}
+                                />
+                            )}
+                        </View>
+
+                        {/* Parcelamento — only in create mode */}
+                        {!expenseToEdit && (
+                            <View style={styles.inputGroup}>
+                                <View style={styles.installmentToggleRow}>
+                                    <View style={styles.installmentToggleLabel}>
+                                        <Ionicons name="card-outline" size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
+                                        <Text style={styles.label}>{t('installment')}</Text>
+                                    </View>
+                                    <Switch
+                                        value={isInstallment}
+                                        onValueChange={setIsInstallment}
+                                        trackColor={{ false: colors.border, true: colors.primary + '60' }}
+                                        thumbColor={isInstallment ? colors.primary : colors.textLight}
+                                    />
+                                </View>
+                                {isInstallment && (
+                                    <View style={styles.installmentSection}>
+                                        <Text style={styles.installmentSectionLabel}>{t('numberOfInstallments')}</Text>
+                                        <View style={styles.installmentCounter}>
+                                            <TouchableOpacity
+                                                style={[styles.installmentBtn, installmentCount <= 2 && styles.installmentBtnDisabled]}
+                                                onPress={() => setInstallmentCount(Math.max(2, installmentCount - 1))}
+                                                disabled={installmentCount <= 2}
+                                            >
+                                                <Ionicons name="remove" size={20} color={installmentCount <= 2 ? colors.textLighter : colors.primary} />
+                                            </TouchableOpacity>
+                                            <Text style={styles.installmentCountText}>{installmentCount}×</Text>
+                                            <TouchableOpacity
+                                                style={[styles.installmentBtn, installmentCount >= 48 && styles.installmentBtnDisabled]}
+                                                onPress={() => setInstallmentCount(Math.min(48, installmentCount + 1))}
+                                                disabled={installmentCount >= 48}
+                                            >
+                                                <Ionicons name="add" size={20} color={installmentCount >= 48 ? colors.textLighter : colors.primary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                        {amount && parseFloat(amount) > 0 && (
+                                            <View style={styles.installmentInfo}>
+                                                <Text style={styles.installmentInfoText}>
+                                                    {t('installmentValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{parseFloat(amount).toFixed(2)} × {installmentCount}
+                                                </Text>
+                                                <Text style={styles.installmentTotalText}>
+                                                    {t('totalValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{(parseFloat(amount) * installmentCount).toFixed(2)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                )}
+                            </View>
+                        )}
 
                         {/* Categorias */}
                         <View style={styles.inputGroup}>
@@ -333,10 +508,12 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 />
                                 <Text style={styles.saveButtonText}>
                                     {saving
-                                        ? t('saving')
+                                        ? (isInstallment ? t('creatingInstallments') : t('saving'))
                                         : expenseToEdit
                                             ? t('saveChanges')
-                                            : t('addExpense')
+                                            : isInstallment
+                                                ? `${t('addExpense')} (${installmentCount}×)`
+                                                : t('addExpense')
                                     }
                                 </Text>
                             </View>
@@ -346,7 +523,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                             <View style={{ height: 200 }} />
                         )}
                     </ScrollView>
-                </View>
+                </Animated.View>
             </View>
         </Modal>
     );
@@ -357,6 +534,18 @@ const createStyles = (colors) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.overlay,
         justifyContent: 'flex-end',
+    },
+    overlayTouchArea: {
+        flex: 1,
+    },
+    handleBar: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: spacing.md,
+        marginBottom: spacing.xs,
     },
     modal: {
         backgroundColor: colors.surface,
@@ -438,6 +627,20 @@ const createStyles = (colors) => StyleSheet.create({
         flex: 1,
         padding: spacing.lg,
         fontSize: fontSize.xl + 2,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+    },
+    dateSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+    },
+    dateSelectorText: {
+        fontSize: fontSize.lg,
         fontFamily: fontFamily.semibold,
         color: colors.text,
     },
@@ -599,5 +802,69 @@ const createStyles = (colors) => StyleSheet.create({
         fontFamily: fontFamily.regular,
         color: colors.primary,
         lineHeight: 18,
+    },
+    installmentToggleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    installmentToggleLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    installmentSection: {
+        marginTop: spacing.lg,
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+    },
+    installmentSectionLabel: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.medium,
+        color: colors.textLight,
+        marginBottom: spacing.md,
+    },
+    installmentCounter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xl,
+    },
+    installmentBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.primaryBg,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    installmentBtnDisabled: {
+        opacity: 0.4,
+    },
+    installmentCountText: {
+        fontSize: fontSize.xxxl,
+        fontFamily: fontFamily.bold,
+        color: colors.primary,
+        minWidth: 50,
+        textAlign: 'center',
+    },
+    installmentInfo: {
+        marginTop: spacing.lg,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        gap: spacing.xs,
+    },
+    installmentInfoText: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+    },
+    installmentTotalText: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.primary,
     },
 });

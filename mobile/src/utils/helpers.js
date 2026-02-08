@@ -1,4 +1,3 @@
-// Formata data (Hoje, Ontem, DD/MM) — aceita idioma
 export function formatDate(dateString, language = 'pt') {
     const date = new Date(dateString);
     const today = new Date();
@@ -23,12 +22,10 @@ export function formatDate(dateString, language = 'pt') {
     }
 }
 
-// Calcula percentagem
 export function calculatePercentage(value, total) {
     return total > 0 ? ((value / total) * 100).toFixed(0) : 0;
 }
 
-// Filtros de data
 export function filterByThisMonth(expenses) {
     const now = new Date();
     const currentMonth = now.getMonth();
@@ -55,10 +52,9 @@ export function filterByLast30Days(expenses) {
 }
 
 export function filterByAll(expenses) {
-    return expenses; // Retorna tudo
+    return expenses;
 }
 
-// Ordenação de despesas
 export function sortByNewest(expenses) {
     return [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
 }
@@ -75,7 +71,6 @@ export function sortByLowest(expenses) {
     return [...expenses].sort((a, b) => a.amount - b.amount);
 }
 
-// Estatísticas
 export function getHighestExpense(expenses) {
     if (expenses.length === 0) return null;
     return expenses.reduce((max, exp) => exp.amount > max.amount ? exp : max);
@@ -86,7 +81,6 @@ export function getAveragePerDay(expenses, startDate, endDate) {
 
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-    // Se não passar datas, calcula entre a primeira e última despesa
     if (!startDate || !endDate) {
         const dates = expenses.map(exp => new Date(exp.date)).sort((a, b) => a - b);
         startDate = dates[0];
@@ -118,7 +112,6 @@ export function getTopCategory(expenses) {
     };
 }
 
-// Agrupar despesas por mês
 export function groupByMonth(expenses) {
     const grouped = {};
 
@@ -135,7 +128,6 @@ export function groupByMonth(expenses) {
     return grouped;
 }
 
-// Pega últimos N meses
 export function getLastNMonths(n = 6) {
     const months = [];
     const now = new Date();
@@ -151,4 +143,54 @@ export function getLastNMonths(n = 6) {
     }
 
     return months;
+}
+
+export function getNextNMonths(n = 3, language = 'pt') {
+    const months = [];
+    const now = new Date();
+    const locale = language === 'en' ? 'en-US' : 'pt-BR';
+    for (let i = 1; i <= n; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        months.push({
+            key: monthYear,
+            label: date.toLocaleDateString(locale, { month: 'short' }).replace('.', ''),
+            fullLabel: date.toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
+            month: date.getMonth(),
+            year: date.getFullYear(),
+        });
+    }
+    return months;
+}
+
+export function calculateForecast(expenses, subscriptions, language = 'pt') {
+    const nextMonths = getNextNMonths(3, language);
+    const installmentRegex = /\((\d+)\/(\d+)\)$/;
+
+    return nextMonths.map((monthInfo) => {
+        const installmentExpenses = expenses.filter((exp) => {
+            const d = new Date(exp.date);
+            return d.getMonth() === monthInfo.month
+                && d.getFullYear() === monthInfo.year
+                && installmentRegex.test(exp.description);
+        });
+        const installmentsTotal = installmentExpenses.reduce((s, e) => s + e.amount, 0);
+
+        const activeSubscriptions = (subscriptions || []).filter(s => s.active);
+        let subscriptionsTotal = 0;
+        activeSubscriptions.forEach((sub) => {
+            let monthly = parseFloat(sub.amount);
+            if (sub.frequency === 'WEEKLY') monthly *= 4.33;
+            if (sub.frequency === 'YEARLY') monthly /= 12;
+            subscriptionsTotal += monthly;
+        });
+
+        return {
+            ...monthInfo,
+            subscriptionsTotal,
+            installmentsTotal,
+            combinedTotal: subscriptionsTotal + installmentsTotal,
+            installmentItems: installmentExpenses,
+        };
+    });
 }

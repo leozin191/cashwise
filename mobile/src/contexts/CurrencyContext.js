@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import currencyService from '../services/currency';
 import { getCurrencyByCode } from '../constants/currencies';
@@ -11,7 +11,6 @@ export const CurrencyProvider = ({ children }) => {
 
     useEffect(() => {
         loadCurrencyPreference();
-        // Carrega taxas ao iniciar
         currencyService.getRates();
     }, []);
 

@@ -20,17 +20,23 @@ export default function CategoryLegend({ category, amount, total, onPress }) {
             onPress={onPress}
             activeOpacity={0.7}
         >
-            <View style={styles.left}>
-                <View style={[styles.colorDot, { backgroundColor: color }]} />
-                <CategoryIcon category={category} size={20} color={color} />
-                <Text style={styles.name}>{t(`categories.${category}`)}</Text>
-            </View>
-            <View style={styles.right}>
+            <View style={styles.topRow}>
+                <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
+                    <CategoryIcon category={category} size={18} color={color} />
+                </View>
+                <View style={styles.info}>
+                    <Text style={styles.name}>{t(`categories.${category}`)}</Text>
+                    <Text style={styles.percent}>{percentage}%</Text>
+                </View>
                 <CurrencyDisplay
                     amountInEUR={amount}
                     style={styles.amount}
                 />
-                <Text style={styles.percent}>{percentage}%</Text>
+            </View>
+
+            {/* Progress bar */}
+            <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: color }]} />
             </View>
         </TouchableOpacity>
     );
@@ -38,43 +44,52 @@ export default function CategoryLegend({ category, amount, total, onPress }) {
 
 const createStyles = (colors) => StyleSheet.create({
     item: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
         borderRadius: borderRadius.md,
         marginBottom: spacing.sm,
         backgroundColor: colors.background,
     },
-    left: {
+    topRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        flex: 1,
-        gap: spacing.sm,
+        marginBottom: spacing.sm,
     },
-    colorDot: {
-        width: 12,
-        height: 12,
-        borderRadius: borderRadius.full,
+    iconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    info: {
+        flex: 1,
+        marginLeft: spacing.md,
     },
     name: {
         fontSize: fontSize.base,
         fontFamily: fontFamily.semibold,
         color: colors.text,
     },
-    right: {
-        alignItems: 'flex-end',
+    percent: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+        marginTop: 1,
     },
     amount: {
         fontSize: fontSize.lg,
         fontFamily: fontFamily.bold,
         color: colors.text,
-        marginBottom: 2,
     },
-    percent: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
+    progressTrack: {
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: borderRadius.full,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: borderRadius.full,
     },
 });

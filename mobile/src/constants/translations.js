@@ -1,11 +1,9 @@
 export const translations = {
     pt: {
-        // Header
         appName: 'CashWise',
         total: 'Total',
         expenses: 'Despesas',
 
-        // Categories
         categories: {
             Food: 'Comida',
             Delivery: 'Delivery',
@@ -40,7 +38,6 @@ export const translations = {
             Other: 'Outros',
         },
 
-        // Metas de gastos
         budgetGoals: 'Metas de Gastos',
         addBudget: 'Adicionar Meta',
         editBudget: 'Editar Meta',
@@ -59,34 +56,28 @@ export const translations = {
         budgetDeleted: 'Meta excluída!',
         save: 'Salvar',
 
-        // Tela principal
         chartTitle: 'Gastos por Categoria',
         tapToSeeDetails: 'Toque para ver detalhes',
 
-        // Filtros
         thisMonth: 'Este mês',
         last30Days: 'Últimos 30 dias',
         all: 'Tudo',
 
-        // Filtros vazios
         noExpensesThisMonth: 'Nenhuma despesa este mês',
         noExpensesLast30Days: 'Nenhuma despesa nos últimos 30 dias',
         tryAnotherPeriod: 'Tente outro período',
 
-        // Busca
         searchExpenses: 'Buscar despesas...',
         searching: 'Buscando',
         noResultsFound: 'Nenhum resultado encontrado',
         noResultsFoundSubtext: 'Tente outra busca',
 
-        // Ordenação
         sortBy: 'Ordenar por',
         newest: 'Mais recente',
         oldest: 'Mais antiga',
         highest: 'Maior valor',
         lowest: 'Menor valor',
 
-        // Estatísticas
         statistics: 'Estatísticas',
         highestExpense: 'Maior gasto',
         averagePerDay: 'Média por dia',
@@ -95,7 +86,6 @@ export const translations = {
         noExpensesSubtext: 'Toque no botão + para começar',
         loading: 'Carregando...',
 
-        // Modal adicionar/editar
         newExpense: 'Nova Despesa',
         editExpense: 'Editar Despesa',
         description: 'Descrição',
@@ -108,7 +98,6 @@ export const translations = {
         saveChanges: 'Salvar Alterações',
         saving: 'Salvando...',
 
-        // Alertas
         success: 'Sucesso!',
         error: 'Erro',
         deleted: 'Deletado!',
@@ -127,7 +116,6 @@ export const translations = {
         delete: 'Deletar',
         attention: 'Atenção',
 
-        // Settings
         settings: 'Configurações',
         home: 'Início',
         appearance: 'Aparência',
@@ -143,7 +131,6 @@ export const translations = {
         saveToFile: 'Salvar dados em arquivo',
         featureInDev: 'Funcionalidade em desenvolvimento',
 
-        // Taxas de câmbio
         exchangeRates: 'Taxas de Câmbio',
         updateRates: 'Atualizar Taxas',
         updating: 'Atualizando...',
@@ -154,23 +141,24 @@ export const translations = {
         ratesUpdated: 'Taxas atualizadas!',
         errorUpdating: 'Erro ao atualizar taxas',
 
-        // Evolução mensal
         monthlyEvolution: 'Evolução Mensal',
         highestMonth: 'Maior mês',
         lowestMonth: 'Menor mês',
         monthlyAverage: 'Média mensal',
         noDataYet: 'Sem dados ainda',
         addExpensesToSee: 'Adicione despesas para ver o gráfico',
+        trend: 'Tendência',
+        vsLastMonth: 'vs mês anterior',
 
         data: 'Dados',
         exportBackup: 'Exportar backup',
         importBackup: 'Importar backup',
         clearData: 'Limpar dados',
+        clearDataHint: 'Apagar todas as despesas',
         about: 'Sobre',
         version: 'Versão',
         developedBy: 'Desenvolvido por',
 
-        // Subscriptions
         subscriptions: 'Assinaturas',
         addSubscription: 'Nova Assinatura',
         editSubscription: 'Editar Assinatura',
@@ -196,15 +184,52 @@ export const translations = {
         createCurrentExpenseHint: 'Se o pagamento deste mês já ocorreu, crie agora. Se não, será criada automaticamente.',
         yes: 'Sim, criar',
         no: 'Não, só próximo',
+
+        date: 'Data',
+        selectDate: 'Selecionar data',
+        exportCSV: 'Exportar CSV',
+        exportAsCSV: 'Exportar despesas como CSV',
+        noExpensesToExport: 'Nenhuma despesa para exportar',
+        csvExported: 'CSV exportado com sucesso!',
+        exportFailed: 'Erro ao exportar',
+        sharingNotAvailable: 'Partilha não disponível neste dispositivo',
+        fullBackup: 'Backup Completo',
+        exportFullBackup: 'Exportar todos os dados em JSON',
+        backupExported: 'Backup exportado com sucesso!',
+        invalidBackupFile: 'Ficheiro de backup inválido',
+        restoreConfirm: 'Os dados atuais serão substituídos. Deseja continuar?',
+        restore: 'Restaurar',
+        restoreSuccess: 'Dados restaurados com sucesso!',
+        restoreFailed: 'Erro ao restaurar dados',
+        importFailed: 'Erro ao importar ficheiro',
+        budgetUpdated: 'Meta atualizada!',
+        tapToEdit: 'Toque para editar',
+        edit: 'Editar',
+        searchHint: 'Pesquise por descrição, categoria, valor ou data',
+        restoreData: 'Restaurar dados de backup',
+
+        installment: 'Parcelado',
+        numberOfInstallments: 'Número de parcelas',
+        installmentValue: 'Valor por parcela',
+        totalValue: 'Valor total',
+        installmentOf: 'Parcela',
+        creatingInstallments: 'Criando parcelas...',
+        installmentsCreated: 'parcelas criadas!',
+
+        forecast: 'Previsão',
+        forecastSubtitle: 'Próximos 3 meses',
+        subscriptionsTotal: 'Assinaturas',
+        installmentsTotal: 'Parcelas',
+        forecastTotal: 'Total previsto',
+        noUpcomingCosts: 'Nenhum custo futuro',
+        noUpcomingCostsHint: 'Sem parcelas ou assinaturas ativas',
     },
 
     en: {
-        // Header
         appName: 'CashWise',
         total: 'Total',
         expenses: 'Expenses',
 
-        // Categories
         categories: {
             Food: 'Food',
             Delivery: 'Delivery',
@@ -239,7 +264,6 @@ export const translations = {
             Other: 'Other',
         },
 
-        // Budget goals
         budgetGoals: 'Budget Goals',
         addBudget: 'Add Budget',
         editBudget: 'Edit Budget',
@@ -258,34 +282,28 @@ export const translations = {
         budgetDeleted: 'Budget deleted!',
         save: 'Save',
 
-        // Main screen
         chartTitle: 'Expenses by Category',
         tapToSeeDetails: 'Tap to see details',
 
-        // Filters
         thisMonth: 'This month',
         last30Days: 'Last 30 days',
         all: 'All',
 
-        // Empty filters
         noExpensesThisMonth: 'No expenses this month',
         noExpensesLast30Days: 'No expenses in the last 30 days',
         tryAnotherPeriod: 'Try another period',
 
-        // Search
         searchExpenses: 'Search expenses...',
         searching: 'Searching',
         noResultsFound: 'No results found',
         noResultsFoundSubtext: 'Try another search',
 
-        // Sort
         sortBy: 'Sort by',
         newest: 'Newest',
         oldest: 'Oldest',
         highest: 'Highest value',
         lowest: 'Lowest value',
 
-        // Statistics
         statistics: 'Statistics',
         highestExpense: 'Highest expense',
         averagePerDay: 'Average per day',
@@ -294,7 +312,6 @@ export const translations = {
         noExpensesSubtext: 'Tap the + button to get started',
         loading: 'Loading...',
 
-        // Add/edit modal
         newExpense: 'New Expense',
         editExpense: 'Edit Expense',
         description: 'Description',
@@ -307,7 +324,6 @@ export const translations = {
         saveChanges: 'Save Changes',
         saving: 'Saving...',
 
-        // Alerts
         success: 'Success!',
         error: 'Error',
         deleted: 'Deleted!',
@@ -326,7 +342,6 @@ export const translations = {
         delete: 'Delete',
         attention: 'Attention',
 
-        // Settings
         settings: 'Settings',
         home: 'Home',
         appearance: 'Appearance',
@@ -342,7 +357,6 @@ export const translations = {
         saveToFile: 'Save data to file',
         featureInDev: 'Feature in development',
 
-        // Exchange rates
         exchangeRates: 'Exchange Rates',
         updateRates: 'Update Rates',
         updating: 'Updating...',
@@ -353,23 +367,24 @@ export const translations = {
         ratesUpdated: 'Rates updated!',
         errorUpdating: 'Error updating rates',
 
-        // Monthly evolution
         monthlyEvolution: 'Monthly Evolution',
         highestMonth: 'Highest month',
         lowestMonth: 'Lowest month',
         monthlyAverage: 'Monthly average',
         noDataYet: 'No data yet',
         addExpensesToSee: 'Add expenses to see the chart',
+        trend: 'Trend',
+        vsLastMonth: 'vs last month',
 
         data: 'Data',
         exportBackup: 'Export backup',
         importBackup: 'Import backup',
         clearData: 'Clear data',
+        clearDataHint: 'Delete all expenses',
         about: 'About',
         version: 'Version',
         developedBy: 'Developed by',
 
-        // Subscriptions
         subscriptions: 'Subscriptions',
         addSubscription: 'New Subscription',
         editSubscription: 'Edit Subscription',
@@ -395,10 +410,48 @@ export const translations = {
         createCurrentExpenseHint: 'If this month\'s payment already happened, create it now. Otherwise, it will be created automatically.',
         yes: 'Yes, create',
         no: 'No, next only',
+
+        date: 'Date',
+        selectDate: 'Select date',
+        exportCSV: 'Export CSV',
+        exportAsCSV: 'Export expenses as CSV',
+        noExpensesToExport: 'No expenses to export',
+        csvExported: 'CSV exported successfully!',
+        exportFailed: 'Export failed',
+        sharingNotAvailable: 'Sharing not available on this device',
+        fullBackup: 'Full Backup',
+        exportFullBackup: 'Export all data as JSON',
+        backupExported: 'Backup exported successfully!',
+        invalidBackupFile: 'Invalid backup file',
+        restoreConfirm: 'Current data will be replaced. Continue?',
+        restore: 'Restore',
+        restoreSuccess: 'Data restored successfully!',
+        restoreFailed: 'Failed to restore data',
+        importFailed: 'Failed to import file',
+        budgetUpdated: 'Budget updated!',
+        tapToEdit: 'Tap to edit',
+        edit: 'Edit',
+        searchHint: 'Search by description, category, amount or date',
+        restoreData: 'Restore data from backup',
+
+        installment: 'Installment',
+        numberOfInstallments: 'Number of installments',
+        installmentValue: 'Value per installment',
+        totalValue: 'Total value',
+        installmentOf: 'Installment',
+        creatingInstallments: 'Creating installments...',
+        installmentsCreated: 'installments created!',
+
+        forecast: 'Forecast',
+        forecastSubtitle: 'Next 3 months',
+        subscriptionsTotal: 'Subscriptions',
+        installmentsTotal: 'Installments',
+        forecastTotal: 'Estimated total',
+        noUpcomingCosts: 'No upcoming costs',
+        noUpcomingCostsHint: 'No installments or active subscriptions',
     },
 };
 
-// Função helper para pegar tradução
 export const translate = (lang, key) => {
     const keys = key.split('.');
     let value = translations[lang];
