@@ -13,6 +13,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,14 +28,18 @@ import { getBudgets, saveBudget, deleteBudget, calculateProgress, getAlertLevel 
 import currencyService from '../services/currency';
 import { filterByThisMonth } from '../utils/helpers';
 import { expenseService } from '../services/api';
+import { useSnackbar } from '../contexts/SnackbarContext';
+import ConfirmSheet from '../components/ConfirmSheet';
 
 export default function BudgetsScreen() {
     const { colors } = useTheme();
     const { t } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
+    const { showSuccess } = useSnackbar();
 
     const [budgets, setBudgets] = useState({});
     const [expenses, setExpenses] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('');
     const [limitValue, setLimitValue] = useState('');
@@ -42,6 +47,7 @@ export default function BudgetsScreen() {
     const [convertedBudgets, setConvertedBudgets] = useState({});
     const [convertedSpent, setConvertedSpent] = useState({});
     const [editingBudget, setEditingBudget] = useState(null);
+    const [confirmConfig, setConfirmConfig] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -50,42 +56,49 @@ export default function BudgetsScreen() {
     const onRefresh = async () => {
         setRefreshing(true);
         await loadData();
-        setRefreshing(false);
     };
 
     const loadData = async () => {
-        const budgetsData = await getBudgets();
-        setBudgets(budgetsData);
+        try {
+            setLoading(true);
+            const budgetsData = await getBudgets();
+            setBudgets(budgetsData);
 
-        const allExpenses = await expenseService.getAll();
-        const thisMonth = filterByThisMonth(allExpenses);
-        setExpenses(thisMonth);
+            const allExpenses = await expenseService.getAll();
+            const thisMonth = filterByThisMonth(allExpenses);
+            setExpenses(thisMonth);
 
-        const convertedLimits = {};
-        for (const [category, budget] of Object.entries(budgetsData)) {
-            const inEUR = await currencyService.convertToEUR(budget.limit, budget.currency);
-            const inCurrentCurrency = await currencyService.convert(inEUR, currency);
-            convertedLimits[category] = inCurrentCurrency;
+            const convertedLimits = {};
+            for (const [category, budget] of Object.entries(budgetsData)) {
+                const inEUR = await currencyService.convertToEUR(budget.limit, budget.currency);
+                const inCurrentCurrency = await currencyService.convert(inEUR, currency);
+                convertedLimits[category] = inCurrentCurrency;
+            }
+            setConvertedBudgets(convertedLimits);
+
+            const spent = {};
+            for (const category of Object.keys(budgetsData)) {
+                const filtered = thisMonth.filter(exp => {
+                    const expCategory = normalizeCategory(exp.category);
+                    return expCategory === category;
+                });
+
+                const converted = await Promise.all(
+                    filtered.map(async (exp) => {
+                        const inEUR = await currencyService.convertToEUR(exp.amount, exp.currency || 'EUR');
+                        return await currencyService.convert(inEUR, currency);
+                    })
+                );
+
+                spent[category] = converted.reduce((sum, val) => sum + val, 0);
+            }
+            setConvertedSpent(spent);
+        } catch (error) {
+            console.error('Error loading budgets:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
         }
-        setConvertedBudgets(convertedLimits);
-
-        const spent = {};
-        for (const category of Object.keys(budgetsData)) {
-            const filtered = thisMonth.filter(exp => {
-                const expCategory = normalizeCategory(exp.category);
-                return expCategory === category;
-            });
-
-            const converted = await Promise.all(
-                filtered.map(async (exp) => {
-                    const inEUR = await currencyService.convertToEUR(exp.amount, exp.currency || 'EUR');
-                    return await currencyService.convert(inEUR, currency);
-                })
-            );
-
-            spent[category] = converted.reduce((sum, val) => sum + val, 0);
-        }
-        setConvertedSpent(spent);
     };
 
     const calculateSpent = (category) => {
@@ -101,7 +114,7 @@ export default function BudgetsScreen() {
         const success = await saveBudget(selectedCategory, parseFloat(limitValue), currency);
 
         if (success) {
-            Alert.alert(t('success'), editingBudget ? t('budgetUpdated') : t('budgetSaved'));
+            showSuccess(editingBudget ? t('budgetUpdated') : t('budgetSaved'));
             setShowModal(false);
             setSelectedCategory('');
             setLimitValue('');
@@ -126,22 +139,21 @@ export default function BudgetsScreen() {
     };
 
     const handleDeleteBudget = (category) => {
-        Alert.alert(
-            t('attention'),
-            t('deleteBudget') + '?',
-            [
-                { text: t('cancel'), style: 'cancel' },
-                {
-                    text: t('delete'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        await deleteBudget(category);
-                        Alert.alert(t('success'), t('budgetDeleted'));
-                        loadData();
-                    },
-                },
-            ]
-        );
+        setConfirmConfig({
+            title: t('deleteBudget'),
+            message: t('deleteBudgetConfirm'),
+            icon: 'trash-outline',
+            primaryLabel: t('delete'),
+            primaryTone: 'destructive',
+            onPrimary: async () => {
+                setConfirmConfig(null);
+                await deleteBudget(category);
+                showSuccess(t('budgetDeleted'));
+                loadData();
+            },
+            secondaryLabel: t('cancel'),
+            onSecondary: () => setConfirmConfig(null),
+        });
     };
 
     const getProgressColor = (level) => {
@@ -151,6 +163,15 @@ export default function BudgetsScreen() {
     };
 
     const styles = createStyles(colors);
+
+    if (loading && !refreshing) {
+        return (
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>{t('loading')}</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -395,6 +416,12 @@ export default function BudgetsScreen() {
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
+
+            <ConfirmSheet
+                visible={!!confirmConfig}
+                onClose={() => setConfirmConfig(null)}
+                {...confirmConfig}
+            />
         </View>
     );
 }
@@ -420,6 +447,18 @@ const createStyles = (colors) =>
         content: {
             flex: 1,
             paddingTop: spacing.xl,
+        },
+        centerContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.background,
+            gap: spacing.md,
+        },
+        loadingText: {
+            fontSize: fontSize.lg,
+            fontFamily: fontFamily.medium,
+            color: colors.textLight,
         },
         emptyState: {
             alignItems: 'center',

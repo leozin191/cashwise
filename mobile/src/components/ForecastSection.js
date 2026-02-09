@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -8,8 +8,14 @@ import { getCurrencyByCode } from '../constants/currencies';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
 import { calculateForecast } from '../utils/helpers';
 import currencyService from '../services/currency';
+import CurrencyDisplay from './CurrencyDisplay';
 
-export default function ForecastSection({ expenses, subscriptions }) {
+export default function ForecastSection({
+    expenses,
+    subscriptions,
+    installmentGroups = [],
+    onOpenInstallments,
+}) {
     const { colors } = useTheme();
     const { language, t } = useLanguage();
     const { currency } = useCurrency();
@@ -34,11 +40,47 @@ export default function ForecastSection({ expenses, subscriptions }) {
 
     const styles = createStyles(colors);
     const currencySymbol = getCurrencyByCode(currency).symbol;
+    const hasInstallmentGroups = installmentGroups.length > 0;
+    const nextInstallmentDate = hasInstallmentGroups ? installmentGroups[0].nextDate : null;
+    const InstallmentsCard = onOpenInstallments ? TouchableOpacity : View;
+    const installmentsCardProps = onOpenInstallments ? { onPress: onOpenInstallments, activeOpacity: 0.7 } : {};
 
-    if (forecastData.length === 0) return null;
+    const formatShortDate = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        const locale = language === 'en' ? 'en-US' : 'pt-BR';
+        return date.toLocaleDateString(locale, {
+            day: '2-digit',
+            month: 'short',
+        });
+    };
 
     const selected = forecastData[selectedMonth];
     const hasData = selected && selected.combinedConverted > 0;
+    const installmentRegex = /\((\d+)\/(\d+)\)$/;
+
+    const upcomingInstallments = useMemo(() => {
+        if (!selected) return [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return (selected.installmentItems || [])
+            .map((item) => {
+                const match = item.description?.match(installmentRegex);
+                const base = item.description?.replace(/\s*\(\d+\/\d+\)$/, '').trim() || item.description;
+                return {
+                    ...item,
+                    _installmentIndex: match ? match[1] : null,
+                    _installmentTotal: match ? match[2] : null,
+                    _baseDescription: base,
+                };
+            })
+            .filter((item) => new Date(item.date) >= today)
+            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .slice(0, 3);
+    }, [selected]);
+
+    if (forecastData.length === 0) return null;
 
     return (
         <View style={styles.container}>
@@ -118,6 +160,55 @@ export default function ForecastSection({ expenses, subscriptions }) {
                     <Ionicons name="checkmark-circle-outline" size={36} color={colors.success} />
                     <Text style={styles.emptyText}>{t('noUpcomingCosts')}</Text>
                     <Text style={styles.emptySubtext}>{t('noUpcomingCostsHint')}</Text>
+                </View>
+            )}
+
+            {hasInstallmentGroups && (
+                <InstallmentsCard style={styles.installmentsCard} {...installmentsCardProps}>
+                    <View style={styles.installmentsLeft}>
+                        <View style={[styles.installmentsIcon, { backgroundColor: colors.warning + '20' }]}>
+                            <Ionicons name="card-outline" size={16} color={colors.warning} />
+                        </View>
+                        <View style={styles.installmentsInfo}>
+                            <Text style={styles.installmentsTitle}>{t('installmentsTitle')}</Text>
+                            <Text style={styles.installmentsSubtext}>
+                                {t('nextCharge')}: {formatShortDate(nextInstallmentDate)} · {installmentGroups.length}
+                            </Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                </InstallmentsCard>
+            )}
+
+            {upcomingInstallments.length > 0 && (
+                <View style={styles.installmentsPreview}>
+                    <View style={styles.installmentsPreviewHeader}>
+                        <Ionicons name="calendar-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.installmentsPreviewTitle}>{t('upcomingInstallments')}</Text>
+                    </View>
+                    {upcomingInstallments.map((item, index) => (
+                        <View
+                            key={item.id}
+                            style={[styles.installmentRow, index === 0 && styles.installmentRowFirst]}
+                        >
+                            <View style={styles.installmentRowInfo}>
+                                <Text style={styles.installmentRowTitle} numberOfLines={1}>
+                                    {item._baseDescription}
+                                </Text>
+                                <Text style={styles.installmentRowMeta}>
+                                    {formatShortDate(item.date)}
+                                    {item._installmentIndex && item._installmentTotal
+                                        ? ` · ${item._installmentIndex}/${item._installmentTotal}`
+                                        : ''}
+                                </Text>
+                            </View>
+                            <CurrencyDisplay
+                                amountInEUR={item.amount}
+                                originalCurrency={item.currency}
+                                style={styles.installmentRowAmount}
+                            />
+                        </View>
+                    ))}
                 </View>
             )}
         </View>
@@ -249,5 +340,94 @@ const createStyles = (colors) => StyleSheet.create({
         fontFamily: fontFamily.regular,
         color: colors.textLight,
         marginTop: spacing.xs,
+    },
+    installmentsCard: {
+        marginTop: spacing.lg,
+        backgroundColor: colors.background,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    installmentsLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        marginRight: spacing.md,
+    },
+    installmentsIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: borderRadius.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+    },
+    installmentsInfo: {
+        flex: 1,
+    },
+    installmentsTitle: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+        marginBottom: 2,
+    },
+    installmentsSubtext: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+    },
+    installmentsPreview: {
+        marginTop: spacing.md,
+        backgroundColor: colors.background,
+        borderRadius: borderRadius.md,
+        padding: spacing.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    installmentsPreviewHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    installmentsPreviewTitle: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+    },
+    installmentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    installmentRowFirst: {
+        borderTopWidth: 0,
+        paddingTop: 0,
+    },
+    installmentRowInfo: {
+        flex: 1,
+        marginRight: spacing.md,
+    },
+    installmentRowTitle: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+        marginBottom: 2,
+    },
+    installmentRowMeta: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+    },
+    installmentRowAmount: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
     },
 });

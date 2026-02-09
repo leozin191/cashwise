@@ -11,6 +11,7 @@ import {
     Alert,
     Switch,
     RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,8 @@ import { normalizeCategory } from '../constants/categories';
 import CategoryIcon from '../components/CategoryIcon';
 import { subscriptionService, expenseService } from '../services/api';
 import FadeIn from '../components/FadeIn';
+import { useSnackbar } from '../contexts/SnackbarContext';
+import ConfirmSheet from '../components/ConfirmSheet';
 
 const FREQUENCIES = ['MONTHLY', 'WEEKLY', 'YEARLY'];
 
@@ -29,12 +32,14 @@ export default function SubscriptionsScreen() {
     const { colors } = useTheme();
     const { t } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
+    const { showSuccess } = useSnackbar();
 
     const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [editingSub, setEditingSub] = useState(null);
+    const [confirmConfig, setConfirmConfig] = useState(null);
 
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
@@ -132,39 +137,37 @@ export default function SubscriptionsScreen() {
         try {
             if (editingSub) {
                 await subscriptionService.update(editingSub.id, data);
-                Alert.alert(t('success'), t('subscriptionSaved'));
+                showSuccess(t('subscriptionSaved'));
             } else {
                 await subscriptionService.create(data);
 
-                Alert.alert(
-                    t('createCurrentExpense'),
-                    t('createCurrentExpenseHint'),
-                    [
-                        {
-                            text: t('no'),
-                            style: 'cancel',
-                            onPress: () => Alert.alert(t('success'), t('subscriptionSaved')),
-                        },
-                        {
-                            text: t('yes'),
-                            onPress: async () => {
-                                try {
-                                    const today = new Date().toISOString().split('T')[0];
-                                    await expenseService.create({
-                                        description: data.description + ' (Subscription)',
-                                        amount: data.amount,
-                                        currency: data.currency,
-                                        category: data.category,
-                                        date: today,
-                                    });
-                                    Alert.alert(t('success'), t('subscriptionSaved') + '\n' + t('processSuccess'));
-                                } catch (error) {
-                                    Alert.alert(t('success'), t('subscriptionSaved'));
-                                }
-                            },
-                        },
-                    ]
-                );
+                setConfirmConfig({
+                    title: t('createCurrentExpense'),
+                    message: t('createCurrentExpenseHint'),
+                    icon: 'help-circle-outline',
+                    primaryLabel: t('yes'),
+                    onPrimary: async () => {
+                        setConfirmConfig(null);
+                        try {
+                            const today = new Date().toISOString().split('T')[0];
+                            await expenseService.create({
+                                description: data.description + ' (Subscription)',
+                                amount: data.amount,
+                                currency: data.currency,
+                                category: data.category,
+                                date: today,
+                            });
+                            showSuccess(`${t('subscriptionSaved')} ${t('processSuccess')}`);
+                        } catch (error) {
+                            showSuccess(t('subscriptionSaved'));
+                        }
+                    },
+                    secondaryLabel: t('no'),
+                    onSecondary: () => {
+                        setConfirmConfig(null);
+                        showSuccess(t('subscriptionSaved'));
+                    },
+                });
             }
             setShowModal(false);
             await loadSubscriptions();
@@ -183,25 +186,37 @@ export default function SubscriptionsScreen() {
     };
 
     const handleDelete = (sub) => {
-        Alert.alert(t('attention'), t('deleteSubscriptionConfirm'), [
-            { text: t('cancel'), style: 'cancel' },
-            {
-                text: t('delete'),
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        await subscriptionService.delete(sub.id);
-                        Alert.alert(t('success'), t('subscriptionDeleted'));
-                        await loadSubscriptions();
-                    } catch (error) {
-                        Alert.alert(t('error'), t('couldNotDelete'));
-                    }
-                },
+        setConfirmConfig({
+            title: t('delete'),
+            message: t('deleteSubscriptionConfirm'),
+            icon: 'trash-outline',
+            primaryLabel: t('delete'),
+            primaryTone: 'destructive',
+            onPrimary: async () => {
+                setConfirmConfig(null);
+                try {
+                    await subscriptionService.delete(sub.id);
+                    showSuccess(t('subscriptionDeleted'));
+                    await loadSubscriptions();
+                } catch (error) {
+                    Alert.alert(t('error'), t('couldNotDelete'));
+                }
             },
-        ]);
+            secondaryLabel: t('cancel'),
+            onSecondary: () => setConfirmConfig(null),
+        });
     };
 
     const styles = createStyles(colors);
+
+    if (loading && !refreshing) {
+        return (
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>{t('loading')}</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -385,12 +400,25 @@ export default function SubscriptionsScreen() {
                     </View>
                 </View>
             </Modal>
+
+            <ConfirmSheet
+                visible={!!confirmConfig}
+                onClose={() => setConfirmConfig(null)}
+                {...confirmConfig}
+            />
         </View>
     );
 }
 
 const createStyles = (colors) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    centerContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.background,
+        gap: spacing.md,
+    },
     header: {
         paddingTop: 60,
         paddingBottom: spacing.xl,
@@ -399,6 +427,7 @@ const createStyles = (colors) => StyleSheet.create({
         borderBottomRightRadius: borderRadius.xxl,
     },
     headerTitle: { fontSize: fontSize.xxxl, fontFamily: fontFamily.bold, color: colors.textWhite },
+    loadingText: { fontSize: fontSize.lg, fontFamily: fontFamily.medium, color: colors.textLight },
     headerStats: { marginTop: spacing.md },
     headerLabel: { fontSize: fontSize.sm, fontFamily: fontFamily.medium, color: 'rgba(255,255,255,0.7)' },
     headerAmount: { fontSize: fontSize.xxl, fontFamily: fontFamily.bold, color: colors.textWhite },

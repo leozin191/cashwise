@@ -10,6 +10,7 @@ import SplashScreen from './src/components/SplashScreen';
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { CurrencyProvider } from './src/contexts/CurrencyContext';
+import { SnackbarProvider } from './src/contexts/SnackbarContext';
 import SubscriptionsScreen from './src/screens/SubscriptionsScreen';
 import { fontFamily } from './src/constants/theme';
 
@@ -92,9 +93,11 @@ export default function App() {
         <ThemeProvider>
             <LanguageProvider>
                 <CurrencyProvider>
-                    <NavigationContainer>
-                        <MainTabs />
-                    </NavigationContainer>
+                    <SnackbarProvider>
+                        <NavigationContainer>
+                            <MainTabs />
+                        </NavigationContainer>
+                    </SnackbarProvider>
                 </CurrencyProvider>
             </LanguageProvider>
         </ThemeProvider>

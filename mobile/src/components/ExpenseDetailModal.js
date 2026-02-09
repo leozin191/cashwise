@@ -21,7 +21,7 @@ import CurrencyDisplay from './CurrencyDisplay';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DISMISS_THRESHOLD = 120;
 
-export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, onDelete }) {
+export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, onDelete, onViewInstallments }) {
     const { colors } = useTheme();
     const { t, language } = useLanguage();
     const { getCurrencyInfo } = useCurrency();
@@ -203,6 +203,17 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     )}
                 </View>
 
+                {isInstallment && onViewInstallments && (
+                    <TouchableOpacity
+                        style={styles.installmentsButton}
+                        onPress={() => onViewInstallments(expense)}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="list-outline" size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.installmentsButtonText}>{t('viewInstallments')}</Text>
+                    </TouchableOpacity>
+                )}
+
                 {/* Action Buttons */}
                 {(onEdit || onDelete) && (
                     <View style={styles.actionButtons}>
@@ -354,6 +365,21 @@ const createStyles = (colors, categoryColor) => StyleSheet.create({
         flexDirection: 'row',
         width: '100%',
         gap: spacing.md,
+    },
+    installmentsButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        backgroundColor: colors.primaryBg,
+        borderRadius: borderRadius.lg,
+        paddingVertical: spacing.md,
+        marginBottom: spacing.md,
+    },
+    installmentsButtonText: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.primary,
     },
     editButton: {
         flex: 1,

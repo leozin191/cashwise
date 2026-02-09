@@ -28,11 +28,20 @@ import { getBudgets, calculateProgress, getAlertLevel } from '../utils/budgets';
 import { filterByThisMonth } from '../utils/helpers';
 import CategoryIcon from './CategoryIcon';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSnackbar } from '../contexts/SnackbarContext';
 
-export default function AddExpenseModal({ visible, onClose, onSuccess, expenseToEdit = null }) {
+export default function AddExpenseModal({
+    visible,
+    onClose,
+    onSuccess,
+    expenseToEdit = null,
+    installmentGroupToEdit = null,
+    prefillExpense = null,
+}) {
     const { t, language } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
     const { colors } = useTheme();
+    const { showSuccess } = useSnackbar();
     const styles = createStyles(colors);
 
     const [description, setDescription] = useState(expenseToEdit?.description || '');
@@ -95,6 +104,47 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
         }
     }, [expenseToEdit, currency]);
 
+    useEffect(() => {
+        if (expenseToEdit || !installmentGroupToEdit) return;
+        if (!Array.isArray(installmentGroupToEdit) || installmentGroupToEdit.length === 0) return;
+
+        const totalCount = Math.max(
+            ...installmentGroupToEdit.map((item) => item._installmentTotal || 0),
+            installmentGroupToEdit.length
+        );
+        const totalAmount = installmentGroupToEdit.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        const firstDate = installmentGroupToEdit.reduce((min, item) => {
+            const current = new Date(item.date);
+            return current < min ? current : min;
+        }, new Date(installmentGroupToEdit[0].date));
+        const baseDescription = installmentGroupToEdit[0]?.description
+            ?.replace(/\s*\(\d+\/\d+\)$/, '')
+            .trim();
+        const firstCurrency = installmentGroupToEdit[0]?.currency || currency;
+        const groupCategory = installmentGroupToEdit.every((item) => item.category === installmentGroupToEdit[0].category)
+            ? (installmentGroupToEdit[0].category || '')
+            : '';
+
+        setDescription(baseDescription || '');
+        setAmount(totalAmount.toFixed(2));
+        setCategory(groupCategory);
+        setSelectedCurrency(firstCurrency);
+        setSelectedDate(firstDate);
+        setIsInstallment(true);
+        setInstallmentCount(totalCount);
+    }, [expenseToEdit, installmentGroupToEdit, currency]);
+
+    useEffect(() => {
+        if (expenseToEdit || installmentGroupToEdit || !prefillExpense) return;
+        setDescription(prefillExpense.description || '');
+        setAmount(prefillExpense.amount ? prefillExpense.amount.toString() : '');
+        setCategory(prefillExpense.category || '');
+        setSelectedCurrency(prefillExpense.currency || currency);
+        setSelectedDate(new Date());
+        setIsInstallment(false);
+        setInstallmentCount(2);
+    }, [expenseToEdit, installmentGroupToEdit, prefillExpense, currency]);
+
     const checkBudgetAlert = async (expense) => {
         try {
             const budgets = await getBudgets();
@@ -135,6 +185,15 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
         }
     };
 
+    const splitInstallments = (total, count) => {
+        const totalCents = Math.round(total * 100);
+        const baseCents = Math.floor(totalCents / count);
+        const remainder = totalCents % count;
+        return Array.from({ length: count }, (_, index) => (
+            (baseCents + (index < remainder ? 1 : 0)) / 100
+        ));
+    };
+
     const handleSave = async () => {
         if (!description.trim()) {
             Alert.alert(t('attention'), t('enterDescription'));
@@ -148,16 +207,32 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
         try {
             setSaving(true);
 
-            if (!expenseToEdit && isInstallment && installmentCount > 1) {
+            if (installmentGroupToEdit && isInstallment && installmentCount > 1) {
                 const baseDate = new Date(selectedDate);
+                const totalAmount = parseFloat(amount);
+                const idsToDelete = installmentGroupToEdit.map((item) => item.id).filter(Boolean);
+                const installments = splitInstallments(totalAmount, installmentCount);
+
+                if (idsToDelete.length === 0) {
+                    Alert.alert(t('error'), t('couldNotSave'));
+                    return;
+                }
+
+                const deleteResults = await Promise.allSettled(
+                    idsToDelete.map((expenseId) => expenseService.delete(expenseId))
+                );
+                const deleteFailed = deleteResults.some((result) => result.status === 'rejected');
+                if (deleteFailed) {
+                    Alert.alert(t('error'), t('couldNotDelete'));
+                    return;
+                }
 
                 for (let i = 0; i < installmentCount; i++) {
                     const parcelDate = new Date(baseDate);
                     parcelDate.setMonth(parcelDate.getMonth() + i);
-
                     const parcelData = {
                         description: `${description.trim()} (${i + 1}/${installmentCount})`,
-                        amount: parseFloat(amount),
+                        amount: installments[i],
                         currency: selectedCurrency,
                         date: parcelDate.toISOString().split('T')[0],
                         ...(category && { category }),
@@ -170,9 +245,34 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                     }
                 }
 
-                Alert.alert(t('success'), `${installmentCount} ${t('installmentsCreated')}`, [
-                    { text: 'OK', onPress: handleClose }
-                ]);
+                showSuccess(t('installmentsUpdated'));
+                handleClose();
+            } else if (!expenseToEdit && isInstallment && installmentCount > 1) {
+                const baseDate = new Date(selectedDate);
+                const totalAmount = parseFloat(amount);
+                const installments = splitInstallments(totalAmount, installmentCount);
+
+                for (let i = 0; i < installmentCount; i++) {
+                    const parcelDate = new Date(baseDate);
+                    parcelDate.setMonth(parcelDate.getMonth() + i);
+
+                    const parcelData = {
+                        description: `${description.trim()} (${i + 1}/${installmentCount})`,
+                        amount: installments[i],
+                        currency: selectedCurrency,
+                        date: parcelDate.toISOString().split('T')[0],
+                        ...(category && { category }),
+                    };
+
+                    const result = await expenseService.create(parcelData);
+
+                    if (i === 0) {
+                        await checkBudgetAlert(result);
+                    }
+                }
+
+                showSuccess(`${installmentCount} ${t('installmentsCreated')}`);
+                handleClose();
             } else {
                 const expenseData = {
                     description: description.trim(),
@@ -184,25 +284,21 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
 
                 if (expenseToEdit) {
                     await expenseService.update(expenseToEdit.id, expenseData);
-                    Alert.alert(t('success'), t('expenseUpdated'), [
-                        { text: 'OK', onPress: handleClose }
-                    ]);
+                    showSuccess(t('expenseUpdated'));
+                    handleClose();
                 } else {
                     const result = await expenseService.create(expenseData);
 
                     await checkBudgetAlert(result);
 
                     if (!category && result.category) {
-                        Alert.alert(
-                            t('success'),
-                            `${t('expenseAdded')}\n${t('aiCategorized')} ${t(`categories.${result.category}`)}`,
-                            [{ text: 'OK', onPress: handleClose }]
+                        showSuccess(
+                            `${t('expenseAdded')} ${t('aiCategorized')} ${t(`categories.${result.category}`)}`
                         );
                     } else {
-                        Alert.alert(t('success'), t('expenseAdded'), [
-                            { text: 'OK', onPress: handleClose }
-                        ]);
+                        showSuccess(t('expenseAdded'));
                     }
+                    handleClose();
                 }
             }
 
@@ -230,6 +326,20 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
         onClose();
     };
 
+    const parsedAmount = parseFloat(amount);
+    const hasValidAmount = !Number.isNaN(parsedAmount) && parsedAmount > 0;
+    const installmentAmounts = hasValidAmount ? splitInstallments(parsedAmount, installmentCount) : [];
+    const firstInstallmentAmount = installmentAmounts[0] || 0;
+    const lastInstallmentAmount = installmentAmounts[installmentAmounts.length - 1] || 0;
+    const isInstallmentLocked = !!installmentGroupToEdit;
+    const currencyFlag = CURRENCIES.find((curr) => curr.code === currency)?.flag || '';
+    const defaultCurrencyTemplate = t('defaultCurrencyInfo');
+    const defaultCurrencyInfoText = (
+        defaultCurrencyTemplate === 'defaultCurrencyInfo'
+            ? `Default currency: ${currencyFlag} ${currency}`
+            : defaultCurrencyTemplate.replace('{flag}', currencyFlag).replace('{code}', currency)
+    ).replace(/\s{2,}/g, ' ').trim();
+
     return (
         <Modal
             visible={visible}
@@ -249,7 +359,11 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>
-                            {expenseToEdit ? t('editExpense') : t('newExpense')}
+                            {expenseToEdit
+                                ? t('editExpense')
+                                : installmentGroupToEdit
+                                    ? t('editInstallments')
+                                    : t('newExpense')}
                         </Text>
                         <TouchableOpacity onPress={handleClose}>
                             <Text style={styles.closeButton}>✕</Text>
@@ -282,7 +396,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
 
                         {/* Campo Valor */}
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>{t('amount')}</Text>
+                            <Text style={styles.label}>
+                                {isInstallment ? t('totalValue') : t('amount')}
+                            </Text>
                             <View style={styles.amountContainer}>
                                 <Text style={styles.currencySymbol}>
                                     {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || getCurrencyInfo().symbol}
@@ -340,10 +456,11 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                         <Text style={styles.label}>{t('installment')}</Text>
                                     </View>
                                     <Switch
-                                        value={isInstallment}
+                                        value={isInstallmentLocked ? true : isInstallment}
                                         onValueChange={setIsInstallment}
+                                        disabled={isInstallmentLocked}
                                         trackColor={{ false: colors.border, true: colors.primary + '60' }}
-                                        thumbColor={isInstallment ? colors.primary : colors.textLight}
+                                        thumbColor={(isInstallmentLocked || isInstallment) ? colors.primary : colors.textLight}
                                     />
                                 </View>
                                 {isInstallment && (
@@ -366,13 +483,17 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                                 <Ionicons name="add" size={20} color={installmentCount >= 48 ? colors.textLighter : colors.primary} />
                                             </TouchableOpacity>
                                         </View>
-                                        {amount && parseFloat(amount) > 0 && (
+                                        {hasValidAmount && (
                                             <View style={styles.installmentInfo}>
                                                 <Text style={styles.installmentInfoText}>
-                                                    {t('installmentValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{parseFloat(amount).toFixed(2)} × {installmentCount}
+                                                    {t('installmentValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}
+                                                    {firstInstallmentAmount.toFixed(2)}
+                                                    {firstInstallmentAmount !== lastInstallmentAmount
+                                                        ? ` - ${lastInstallmentAmount.toFixed(2)}`
+                                                        : ''}
                                                 </Text>
                                                 <Text style={styles.installmentTotalText}>
-                                                    {t('totalValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{(parseFloat(amount) * installmentCount).toFixed(2)}
+                                                    {t('totalValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{parsedAmount.toFixed(2)}
                                                 </Text>
                                             </View>
                                         )}
@@ -485,7 +606,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                     <View style={styles.infoBoxContent}>
                                         <Ionicons name="information-circle-outline" size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
                                         <Text style={styles.infoText}>
-                                            {t('defaultCurrencyInfo') || `Default currency: ${CURRENCIES.find(c => c.code === currency)?.flag} ${currency}`}
+                                            {defaultCurrencyInfoText}
                                         </Text>
                                     </View>
                                 </View>
@@ -508,8 +629,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess, expenseTo
                                 />
                                 <Text style={styles.saveButtonText}>
                                     {saving
-                                        ? (isInstallment ? t('creatingInstallments') : t('saving'))
-                                        : expenseToEdit
+                                        ? (isInstallment && !expenseToEdit && !installmentGroupToEdit
+                                            ? t('creatingInstallments')
+                                            : t('saving'))
+                                        : (expenseToEdit || installmentGroupToEdit)
                                             ? t('saveChanges')
                                             : isInstallment
                                                 ? `${t('addExpense')} (${installmentCount}×)`

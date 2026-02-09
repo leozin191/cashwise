@@ -9,13 +9,19 @@ import {
     Switch,
     Alert,
     Modal,
+    TextInput,
+    ActivityIndicator,
+    Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Print from 'expo-print';
+import * as MailComposer from 'expo-mail-composer';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
@@ -24,32 +30,235 @@ import { CURRENCIES } from '../constants/currencies';
 import currencyService from '../services/currency';
 import { expenseService, subscriptionService } from '../services/api';
 import { getBudgets } from '../utils/budgets';
+import { calculateForecast, getAveragePerDay, getHighestExpense, getTopCategory, groupByMonth, getLastNMonths } from '../utils/helpers';
+import OfflineBanner from '../components/OfflineBanner';
+import { generateReportHTML } from '../utils/pdfGenerator';
+import { useSnackbar } from '../contexts/SnackbarContext';
+import ConfirmSheet from '../components/ConfirmSheet';
+import { ensureNotificationPermissions, getReminderSettings, saveReminderSettings, scheduleReminders } from '../utils/notifications';
+import {
+    createBackupPayload,
+    getAutoBackupMeta,
+    loadAutoBackupPayload,
+    restoreBackupPayload,
+    runAutoBackupIfDue,
+    setAutoBackupEnabled,
+} from '../utils/backup';
 
 export default function SettingsScreen() {
     const { language, changeLanguage, t } = useLanguage();
     const { isDark, toggleTheme, colors } = useTheme();
     const { currency, changeCurrency, getCurrencyInfo } = useCurrency();
+    const { showSuccess } = useSnackbar();
 
     const [showCurrencyModal, setShowCurrencyModal] = useState(false);
     const [lastUpdate, setLastUpdate] = useState(null);
     const [currentRate, setCurrentRate] = useState(null);
     const [updatingRates, setUpdatingRates] = useState(false);
+    const [userEmail, setUserEmail] = useState('');
+    const [exportingPDF, setExportingPDF] = useState(false);
+    const [clearingData, setClearingData] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState(null);
+    const [remindersEnabled, setRemindersEnabled] = useState(false);
+    const [reminderDaysBefore, setReminderDaysBefore] = useState([0, 1, 2]);
+    const [reminderTime, setReminderTime] = useState(new Date());
+    const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+    const [updatingReminders, setUpdatingReminders] = useState(false);
+    const [autoBackupEnabled, setAutoBackupEnabledState] = useState(false);
+    const [autoBackupTimestamp, setAutoBackupTimestamp] = useState(null);
+    const [autoBackupRunning, setAutoBackupRunning] = useState(false);
 
     useEffect(() => {
         loadExchangeRateInfo();
     }, [currency]);
 
+    useEffect(() => {
+        loadUserEmail();
+    }, []);
+
+    useEffect(() => {
+        loadReminderPreferences();
+    }, []);
+
+    useEffect(() => {
+        loadAutoBackupSettings();
+    }, []);
+
+    const loadUserEmail = async () => {
+        try {
+            const savedEmail = await AsyncStorage.getItem('@user_email');
+            if (savedEmail) setUserEmail(savedEmail);
+        } catch (error) {
+            console.error('Error loading user email:', error);
+        }
+    };
+
+    const toTimeString = (date) => {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+    };
+
+    const formatTimeLabel = (date) => (
+        date.toLocaleTimeString(language === 'pt' ? 'pt-BR' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+        })
+    );
+
+    const loadReminderPreferences = async () => {
+        const settings = await getReminderSettings();
+        setRemindersEnabled(!!settings.enabled);
+        setReminderDaysBefore(settings.daysBefore || [0, 1, 2]);
+
+        const [hours, minutes] = (settings.time || '09:00').split(':').map((val) => parseInt(val, 10));
+        const timeDate = new Date();
+        timeDate.setHours(Number.isFinite(hours) ? hours : 9, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+        setReminderTime(timeDate);
+    };
+
+    const updateReminderSettings = async (nextSettings, { silent = false } = {}) => {
+        setUpdatingReminders(true);
+        try {
+            const saved = await saveReminderSettings(nextSettings);
+            setRemindersEnabled(!!saved.enabled);
+            setReminderDaysBefore(saved.daysBefore || []);
+
+            const [hours, minutes] = (saved.time || '09:00').split(':').map((val) => parseInt(val, 10));
+            const timeDate = new Date();
+            timeDate.setHours(Number.isFinite(hours) ? hours : 9, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+            setReminderTime(timeDate);
+
+            if (!silent) {
+                const [expenses, subscriptions] = await Promise.all([
+                    expenseService.getAll(),
+                    subscriptionService.getAll(),
+                ]);
+                await scheduleReminders({ expenses, subscriptions, t });
+                showSuccess(t('remindersUpdated'));
+            }
+        } catch (error) {
+            console.error('Error updating reminders:', error);
+        } finally {
+            setUpdatingReminders(false);
+        }
+    };
+
+    const handleToggleReminders = async () => {
+        const nextEnabled = !remindersEnabled;
+        if (nextEnabled) {
+            const granted = await ensureNotificationPermissions();
+            if (!granted) {
+                Alert.alert(t('error'), t('notificationsPermissionDenied'));
+                return;
+            }
+        }
+
+        await updateReminderSettings({
+            enabled: nextEnabled,
+            time: toTimeString(reminderTime),
+            daysBefore: reminderDaysBefore,
+        });
+    };
+
+    const handleToggleReminderDay = async (day) => {
+        const nextDays = reminderDaysBefore.includes(day)
+            ? reminderDaysBefore.filter((value) => value !== day)
+            : [...reminderDaysBefore, day];
+
+        if (nextDays.length === 0) {
+            Alert.alert(t('attention'), t('reminderSelectAtLeastOne'));
+            return;
+        }
+
+        await updateReminderSettings({
+            enabled: remindersEnabled,
+            time: toTimeString(reminderTime),
+            daysBefore: nextDays.sort(),
+        });
+    };
+
+    const loadAutoBackupSettings = async () => {
+        try {
+            const meta = await getAutoBackupMeta();
+            setAutoBackupEnabledState(meta.enabled);
+            setAutoBackupTimestamp(meta.timestamp);
+        } catch (error) {
+            console.error('Error loading auto backup settings:', error);
+        }
+    };
+
+    const formatBackupTimestamp = (timestamp) => {
+        if (!timestamp) return '—';
+        const locale = language === 'pt' ? 'pt-BR' : 'en-US';
+        return new Date(timestamp).toLocaleDateString(locale, {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        });
+    };
+
+    const handleToggleAutoBackup = async () => {
+        const nextEnabled = !autoBackupEnabled;
+        setAutoBackupRunning(true);
+        try {
+            await setAutoBackupEnabled(nextEnabled);
+            setAutoBackupEnabledState(nextEnabled);
+            if (nextEnabled) {
+                await runAutoBackupIfDue({ force: true });
+                const meta = await getAutoBackupMeta();
+                setAutoBackupTimestamp(meta.timestamp);
+            }
+        } catch (error) {
+            console.error('Error toggling auto backup:', error);
+        } finally {
+            setAutoBackupRunning(false);
+        }
+    };
+
+    const handleRestoreAutoBackup = async () => {
+        try {
+            const payload = await loadAutoBackupPayload();
+            if (!payload) {
+                Alert.alert(t('error'), t('autoBackupMissing'));
+                return;
+            }
+
+            setConfirmConfig({
+                title: t('restore'),
+                message: t('restoreConfirm'),
+                icon: 'refresh-outline',
+                primaryLabel: t('restore'),
+                primaryTone: 'destructive',
+                onPrimary: async () => {
+                    setConfirmConfig(null);
+                    try {
+                        await restoreBackupPayload(payload);
+                        showSuccess(t('restoreSuccess'));
+                    } catch (error) {
+                        Alert.alert(t('error'), t('restoreFailed'));
+                    }
+                },
+                secondaryLabel: t('cancel'),
+                onSecondary: () => setConfirmConfig(null),
+            });
+        } catch (error) {
+            Alert.alert(t('error'), t('restoreFailed'));
+        }
+    };
+
     const loadExchangeRateInfo = async () => {
         try {
-            const timestamp = currencyService.getLastUpdateTimestamp();
-            setLastUpdate(timestamp);
-
             if (currency !== 'EUR') {
                 const rate = await currencyService.getRate(currency);
                 setCurrentRate(rate);
             } else {
+                await currencyService.getRates();
                 setCurrentRate(1);
             }
+
+            const timestamp = currencyService.getLastUpdateTimestamp();
+            setLastUpdate(timestamp);
         } catch (error) {
             console.error('Error loading exchange rate info:', error);
         }
@@ -60,7 +269,7 @@ export default function SettingsScreen() {
             setUpdatingRates(true);
             await currencyService.forceUpdate();
             await loadExchangeRateInfo();
-            Alert.alert(t('success'), t('ratesUpdated'));
+            showSuccess(t('ratesUpdated'));
         } catch (error) {
             Alert.alert(t('error'), t('errorUpdating'));
             console.error('Error updating rates:', error);
@@ -84,20 +293,40 @@ export default function SettingsScreen() {
     };
 
     const handleClearData = () => {
-        Alert.alert(
-            t('attention'),
-            t('clearDataConfirm'),
-            [
-                { text: t('cancel'), style: 'cancel' },
-                {
-                    text: t('clearData'),
-                    style: 'destructive',
-                    onPress: () => {
-                        Alert.alert(t('success'), t('featureInDev'));
-                    },
-                },
-            ]
-        );
+        setConfirmConfig({
+            title: t('clearData'),
+            message: t('clearDataConfirm'),
+            icon: 'trash-outline',
+            primaryLabel: t('clearData'),
+            primaryTone: 'destructive',
+            onPrimary: async () => {
+                setConfirmConfig(null);
+                try {
+                    setClearingData(true);
+                    const expenses = await expenseService.getAll();
+                    for (const exp of expenses) {
+                        await expenseService.delete(exp.id);
+                    }
+                    try {
+                        const subs = await subscriptionService.getAll();
+                        for (const sub of subs) {
+                            await subscriptionService.delete(sub.id);
+                        }
+                    } catch (e) {}
+                    await AsyncStorage.removeItem('@budgets');
+                    await AsyncStorage.removeItem('@exchange_rates');
+                    await AsyncStorage.removeItem('@exchange_rates_timestamp');
+                    showSuccess(t('dataCleared'));
+                } catch (error) {
+                    console.error('Clear data error:', error);
+                    Alert.alert(t('error'), t('couldNotDelete'));
+                } finally {
+                    setClearingData(false);
+                }
+            },
+            secondaryLabel: t('cancel'),
+            onSecondary: () => setConfirmConfig(null),
+        });
     };
 
     const handleExportCSV = async () => {
@@ -108,6 +337,7 @@ export default function SettingsScreen() {
                 return;
             }
 
+            const BOM = '\uFEFF';
             const header = 'Date,Description,Category,Amount,Currency\n';
             const sanitizeCSV = (val) => {
                 const str = String(val);
@@ -116,10 +346,11 @@ export default function SettingsScreen() {
             };
             const rows = expenses.map(exp => {
                 const desc = `"${sanitizeCSV((exp.description || '').replace(/"/g, '""'))}"`;
-                return `${exp.date},${desc},${sanitizeCSV(exp.category || '')},${exp.amount},${exp.currency || 'EUR'}`;
+                const cat = `"${sanitizeCSV((exp.category || '').replace(/"/g, '""'))}"`;
+                return `${exp.date},${desc},${cat},${exp.amount},${exp.currency || 'EUR'}`;
             }).join('\n');
 
-            const csv = header + rows;
+            const csv = BOM + header + rows;
             const today = new Date().toISOString().split('T')[0];
             const filePath = `${FileSystem.documentDirectory}cashwise-expenses-${today}.csv`;
 
@@ -138,27 +369,7 @@ export default function SettingsScreen() {
 
     const handleFullBackup = async () => {
         try {
-            const expenses = await expenseService.getAll();
-            let subscriptions = [];
-            try { subscriptions = await subscriptionService.getAll(); } catch (e) {}
-            const budgets = await getBudgets();
-
-            const langSetting = await AsyncStorage.getItem('@language');
-            const currSetting = await AsyncStorage.getItem('@currency');
-            const themeSetting = await AsyncStorage.getItem('@theme');
-
-            const backup = {
-                version: 1,
-                exportDate: new Date().toISOString(),
-                expenses,
-                subscriptions,
-                budgets,
-                settings: {
-                    language: langSetting,
-                    currency: currSetting,
-                    theme: themeSetting,
-                },
-            };
+            const backup = await createBackupPayload();
 
             const today = new Date().toISOString().split('T')[0];
             const filePath = `${FileSystem.documentDirectory}cashwise-backup-${today}.json`;
@@ -205,68 +416,168 @@ export default function SettingsScreen() {
                 return;
             }
 
-            Alert.alert(t('attention'), t('restoreConfirm'), [
-                { text: t('cancel'), style: 'cancel' },
-                {
-                    text: t('restore'),
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            // Delete existing expenses
-                            const existing = await expenseService.getAll();
-                            for (const exp of existing) {
-                                await expenseService.delete(exp.id);
-                            }
-
-                            // Restore expenses
-                            for (const exp of backup.expenses) {
-                                const { id, createdAt, updatedAt, ...data } = exp;
-                                await expenseService.create(data);
-                            }
-
-                            // Restore subscriptions
-                            if (backup.subscriptions?.length > 0) {
-                                try {
-                                    const existingSubs = await subscriptionService.getAll();
-                                    for (const sub of existingSubs) {
-                                        await subscriptionService.delete(sub.id);
-                                    }
-                                    for (const sub of backup.subscriptions) {
-                                        const { id, createdAt, updatedAt, ...data } = sub;
-                                        await subscriptionService.create(data);
-                                    }
-                                } catch (e) {
-                                    console.error('Error restoring subscriptions:', e);
-                                }
-                            }
-
-                            // Restore budgets
-                            if (backup.budgets) {
-                                await AsyncStorage.setItem('@budgets', JSON.stringify(backup.budgets));
-                            }
-
-                            // Restore settings
-                            if (backup.settings) {
-                                if (backup.settings.language) await AsyncStorage.setItem('@language', backup.settings.language);
-                                if (backup.settings.currency) await AsyncStorage.setItem('@currency', backup.settings.currency);
-                                if (backup.settings.theme) await AsyncStorage.setItem('@theme', backup.settings.theme);
-                            }
-
-                            Alert.alert(t('success'), t('restoreSuccess'));
-                        } catch (error) {
-                            console.error('Restore error:', error);
-                            Alert.alert(t('error'), t('restoreFailed'));
-                        }
-                    },
+            setConfirmConfig({
+                title: t('restore'),
+                message: t('restoreConfirm'),
+                icon: 'refresh-outline',
+                primaryLabel: t('restore'),
+                primaryTone: 'destructive',
+                onPrimary: async () => {
+                    setConfirmConfig(null);
+                    try {
+                        await restoreBackupPayload(backup);
+                        showSuccess(t('restoreSuccess'));
+                    } catch (error) {
+                        console.error('Restore error:', error);
+                        Alert.alert(t('error'), t('restoreFailed'));
+                    }
                 },
-            ]);
+                secondaryLabel: t('cancel'),
+                onSecondary: () => setConfirmConfig(null),
+            });
         } catch (error) {
             console.error('Import error:', error);
             Alert.alert(t('error'), t('importFailed'));
         }
     };
 
+    const isValidEmail = (value) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    };
+
+    const handleSaveEmail = async () => {
+        const trimmed = userEmail.trim();
+        if (!trimmed) {
+            await AsyncStorage.removeItem('@user_email');
+            return;
+        }
+
+        if (!isValidEmail(trimmed)) {
+            Alert.alert(t('attention'), t('emailInvalid'));
+            return;
+        }
+
+        try {
+            await AsyncStorage.setItem('@user_email', trimmed);
+            setUserEmail(trimmed);
+            showSuccess(t('emailSaved'));
+        } catch (error) {
+            console.error('Error saving user email:', error);
+        }
+    };
+
+    const handleExportPDF = async () => {
+        const trimmedEmail = userEmail.trim();
+        if (!trimmedEmail) {
+            Alert.alert(t('attention'), t('emailRequired'));
+            return;
+        }
+        if (!isValidEmail(trimmedEmail)) {
+            Alert.alert(t('attention'), t('emailInvalid'));
+            return;
+        }
+
+        try {
+            setExportingPDF(true);
+
+            const [expenses, subscriptions, budgets] = await Promise.all([
+                expenseService.getAll(),
+                subscriptionService.getAll(),
+                getBudgets(),
+            ]);
+
+            const convertedExpenses = await Promise.all(
+                expenses.map(async (exp) => {
+                    const amountInEUR = await currencyService.convertToEUR(exp.amount, exp.currency || 'EUR');
+                    const convertedAmount = await currencyService.convert(amountInEUR, currency);
+                    return {
+                        ...exp,
+                        amount: convertedAmount,
+                        currency,
+                    };
+                })
+            );
+
+            const convertedSubscriptions = await Promise.all(
+                subscriptions.map(async (sub) => {
+                    const amountInEUR = await currencyService.convertToEUR(sub.amount, sub.currency || 'EUR');
+                    const convertedAmount = await currencyService.convert(amountInEUR, currency);
+                    return {
+                        ...sub,
+                        amount: convertedAmount,
+                        currency,
+                    };
+                })
+            );
+
+            const convertedBudgets = {};
+            for (const [category, budget] of Object.entries(budgets || {})) {
+                const amountInEUR = await currencyService.convertToEUR(budget.limit, budget.currency || 'EUR');
+                const convertedAmount = await currencyService.convert(amountInEUR, currency);
+                convertedBudgets[category] = {
+                    ...budget,
+                    limit: convertedAmount,
+                    currency,
+                };
+            }
+
+            const stats = {
+                totalExpenses: convertedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0),
+                transactionCount: convertedExpenses.length,
+                highestExpense: getHighestExpense(convertedExpenses),
+                averagePerDay: getAveragePerDay(convertedExpenses),
+                topCategory: getTopCategory(convertedExpenses),
+            };
+
+            const groupedByMonth = groupByMonth(convertedExpenses);
+            const lastMonths = getLastNMonths(6);
+            const monthlyData = lastMonths.map((month) => ({
+                label: month.label,
+                value: groupedByMonth[month.key] || 0,
+            }));
+
+            const forecast = calculateForecast(convertedExpenses, convertedSubscriptions, language);
+
+            const html = generateReportHTML({
+                expenses: convertedExpenses,
+                subscriptions: convertedSubscriptions,
+                budgets: convertedBudgets,
+                forecast,
+                monthlyData,
+                stats,
+                currencySymbol: getCurrencyInfo().symbol,
+                language,
+                t,
+            });
+
+            const { uri } = await Print.printToFileAsync({
+                html,
+                width: 612,
+                height: 792,
+            });
+
+            const isAvailable = await MailComposer.isAvailableAsync();
+            if (!isAvailable) {
+                Alert.alert(t('error'), t('emailServiceUnavailable'));
+                return;
+            }
+
+            await MailComposer.composeAsync({
+                recipients: [trimmedEmail],
+                subject: t('pdfEmailSubject'),
+                body: t('pdfEmailBody'),
+                attachments: [uri],
+            });
+        } catch (error) {
+            console.error('Export PDF error:', error);
+            Alert.alert(t('error'), t('pdfExportFailed'));
+        } finally {
+            setExportingPDF(false);
+        }
+    };
+
     const styles = createStyles(colors);
+    const isRatesStale = lastUpdate && (Date.now() - lastUpdate) > 24 * 60 * 60 * 1000;
 
     return (
         <View style={styles.container}>
@@ -323,6 +634,124 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
+                {/* Notificacoes */}
+                <View style={styles.section}>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="notifications-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('notifications')}</Text>
+                    </View>
+
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('reminders')}</Text>
+                            <Text style={styles.settingSubtext}>{t('remindersHint')}</Text>
+                        </View>
+                        <Switch
+                            value={remindersEnabled}
+                            onValueChange={handleToggleReminders}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor={colors.surface}
+                            disabled={updatingReminders}
+                        />
+                    </View>
+
+                    {remindersEnabled && (
+                        <>
+                            <TouchableOpacity
+                                style={styles.settingItem}
+                                onPress={() => setShowReminderTimePicker(true)}
+                                disabled={updatingReminders}
+                            >
+                                <View style={styles.settingLeft}>
+                                    <Text style={styles.settingLabel}>{t('remindersTime')}</Text>
+                                    <Text style={styles.settingSubtext}>{formatTimeLabel(reminderTime)}</Text>
+                                </View>
+                                <Text style={styles.arrow}>›</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.settingItem}>
+                                <View style={styles.settingLeft}>
+                                    <Text style={styles.settingLabel}>{t('remindOnDueDate')}</Text>
+                                </View>
+                                <Switch
+                                    value={reminderDaysBefore.includes(0)}
+                                    onValueChange={() => handleToggleReminderDay(0)}
+                                    trackColor={{ false: colors.border, true: colors.primary }}
+                                    thumbColor={colors.surface}
+                                    disabled={updatingReminders}
+                                />
+                            </View>
+
+                            <View style={styles.settingItem}>
+                                <View style={styles.settingLeft}>
+                                    <Text style={styles.settingLabel}>{t('remind1DayBefore')}</Text>
+                                </View>
+                                <Switch
+                                    value={reminderDaysBefore.includes(1)}
+                                    onValueChange={() => handleToggleReminderDay(1)}
+                                    trackColor={{ false: colors.border, true: colors.primary }}
+                                    thumbColor={colors.surface}
+                                    disabled={updatingReminders}
+                                />
+                            </View>
+
+                            <View style={styles.settingItem}>
+                                <View style={styles.settingLeft}>
+                                    <Text style={styles.settingLabel}>{t('remind2DaysBefore')}</Text>
+                                </View>
+                                <Switch
+                                    value={reminderDaysBefore.includes(2)}
+                                    onValueChange={() => handleToggleReminderDay(2)}
+                                    trackColor={{ false: colors.border, true: colors.primary }}
+                                    thumbColor={colors.surface}
+                                    disabled={updatingReminders}
+                                />
+                            </View>
+
+                            {showReminderTimePicker && (
+                                <View style={styles.inlinePicker}>
+                                    <DateTimePicker
+                                        value={reminderTime}
+                                        mode="time"
+                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                        onChange={(event, selected) => {
+                                            if (Platform.OS === 'android') {
+                                                setShowReminderTimePicker(false);
+                                            }
+                                            if (selected) {
+                                                setReminderTime(selected);
+                                                if (Platform.OS === 'android') {
+                                                    updateReminderSettings({
+                                                        enabled: remindersEnabled,
+                                                        time: toTimeString(selected),
+                                                        daysBefore: reminderDaysBefore,
+                                                    }, { silent: false });
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    {Platform.OS === 'ios' && (
+                                        <TouchableOpacity
+                                            style={styles.pickerDoneButton}
+                                            onPress={() => {
+                                                setShowReminderTimePicker(false);
+                                                updateReminderSettings({
+                                                    enabled: remindersEnabled,
+                                                    time: toTimeString(reminderTime),
+                                                    daysBefore: reminderDaysBefore,
+                                                }, { silent: false });
+                                            }}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text style={styles.pickerDoneText}>OK</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
+                        </>
+                    )}
+                </View>
+
                 {/* Gastos */}
                 <View style={styles.section}>
                     <View style={styles.sectionTitleRow}>
@@ -363,6 +792,8 @@ export default function SettingsScreen() {
                             </Text>
                         </View>
                     </View>
+
+                    {isRatesStale && <OfflineBanner message={t('ratesStale')} />}
 
                     {/* Botão Atualizar */}
                     <TouchableOpacity
@@ -418,15 +849,101 @@ export default function SettingsScreen() {
                         <Text style={styles.arrow}>›</Text>
                     </TouchableOpacity>
 
+                    {/* Backup automatico */}
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('autoBackup')}</Text>
+                            <Text style={styles.settingSubtext}>{t('autoBackupHint')}</Text>
+                            <Text style={styles.settingSubtext}>
+                                {t('lastBackup')}: {formatBackupTimestamp(autoBackupTimestamp)}
+                            </Text>
+                        </View>
+                        <Switch
+                            value={autoBackupEnabled}
+                            onValueChange={handleToggleAutoBackup}
+                            trackColor={{ false: colors.border, true: colors.primary }}
+                            thumbColor={colors.surface}
+                            disabled={autoBackupRunning}
+                        />
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.settingItem}
+                        onPress={handleRestoreAutoBackup}
+                        disabled={autoBackupRunning}
+                    >
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('restoreLastBackup')}</Text>
+                            <Text style={styles.settingSubtext}>
+                                {t('lastBackup')}: {formatBackupTimestamp(autoBackupTimestamp)}
+                            </Text>
+                        </View>
+                        <Text style={styles.arrow}>›</Text>
+                    </TouchableOpacity>
+
                     {/* Limpar */}
-                    <TouchableOpacity style={styles.settingItem} onPress={handleClearData}>
+                    <TouchableOpacity
+                        style={[styles.settingItem, clearingData && styles.settingItemDisabled]}
+                        onPress={handleClearData}
+                        disabled={clearingData}
+                    >
                         <View style={styles.settingLeft}>
                             <Text style={[styles.settingLabel, styles.dangerText]}>
                                 {t('clearData')}
                             </Text>
                             <Text style={styles.settingSubtext}>{t('clearDataHint')}</Text>
                         </View>
-                        <Text style={[styles.arrow, styles.dangerText]}>›</Text>
+                        {clearingData ? (
+                            <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                            <Text style={[styles.arrow, styles.dangerText]}>›</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+
+
+                {/* Relatorio */}
+                <View style={styles.section}>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="mail-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('report')}</Text>
+                    </View>
+
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('emailForReports')}</Text>
+                            <TextInput
+                                style={styles.emailInput}
+                                value={userEmail}
+                                onChangeText={setUserEmail}
+                                onBlur={handleSaveEmail}
+                                placeholder={t('emailPlaceholder')}
+                                placeholderTextColor={colors.textLight}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                                autoCorrect={false}
+                            />
+                        </View>
+                    </View>
+
+                    <TouchableOpacity
+                        style={[styles.reportButton, exportingPDF && styles.reportButtonDisabled]}
+                        onPress={handleExportPDF}
+                        disabled={exportingPDF}
+                    >
+                        <View style={styles.reportButtonContent}>
+                            <Ionicons
+                                name={exportingPDF ? 'hourglass-outline' : 'document-text-outline'}
+                                size={18}
+                                color={colors.textWhite}
+                                style={{ marginRight: spacing.sm }}
+                            />
+                            <Text style={styles.reportButtonText}>
+                                {exportingPDF ? t('generatingPDF') : t('exportPDFReport')}
+                            </Text>
+                        </View>
+                        <Text style={styles.reportButtonHint}>{t('exportPDFHint')}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -501,6 +1018,12 @@ export default function SettingsScreen() {
                     </View>
                 </View>
             </Modal>
+
+            <ConfirmSheet
+                visible={!!confirmConfig}
+                onClose={() => setConfirmConfig(null)}
+                {...confirmConfig}
+            />
         </View>
     );
 }
@@ -553,6 +1076,31 @@ const createStyles = (colors) =>
             borderRadius: borderRadius.lg,
             ...shadows.small,
         },
+        settingItemDisabled: {
+            opacity: 0.6,
+        },
+        inlinePicker: {
+            marginHorizontal: spacing.xl,
+            marginTop: spacing.sm,
+            marginBottom: spacing.sm,
+            backgroundColor: colors.surface,
+            borderRadius: borderRadius.lg,
+            padding: spacing.md,
+            ...shadows.small,
+        },
+        pickerDoneButton: {
+            alignSelf: 'flex-end',
+            marginTop: spacing.sm,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.xs,
+            borderRadius: borderRadius.full,
+            backgroundColor: colors.primaryBg,
+        },
+        pickerDoneText: {
+            fontSize: fontSize.sm,
+            fontFamily: fontFamily.semibold,
+            color: colors.primary,
+        },
         settingLeft: {
             flex: 1,
         },
@@ -571,6 +1119,18 @@ const createStyles = (colors) =>
             fontSize: fontSize.base,
             fontFamily: fontFamily.semibold,
             color: colors.textLight,
+        },
+        emailInput: {
+            marginTop: spacing.xs,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: borderRadius.md,
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.md,
+            fontSize: fontSize.base,
+            fontFamily: fontFamily.regular,
+            color: colors.text,
         },
         languageButton: {
             backgroundColor: colors.primaryBg,
@@ -614,6 +1174,36 @@ const createStyles = (colors) =>
             fontSize: fontSize.base,
             fontFamily: fontFamily.semibold,
             color: colors.textWhite,
+        },
+        reportButton: {
+            backgroundColor: colors.primary,
+            marginHorizontal: spacing.xl,
+            marginTop: spacing.sm,
+            paddingVertical: spacing.md,
+            paddingHorizontal: spacing.lg,
+            borderRadius: borderRadius.md,
+            alignItems: 'center',
+            ...shadows.small,
+        },
+        reportButtonDisabled: {
+            opacity: 0.5,
+        },
+        reportButtonContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        reportButtonText: {
+            fontSize: fontSize.base,
+            fontFamily: fontFamily.semibold,
+            color: colors.textWhite,
+        },
+        reportButtonHint: {
+            marginTop: spacing.xs,
+            fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
+            color: colors.textWhite,
+            opacity: 0.9,
+            textAlign: 'center',
         },
         modalOverlay: {
             flex: 1,

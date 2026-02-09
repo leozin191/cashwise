@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { SwipeListView } from 'react-native-swipe-list-view';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { expenseService, subscriptionService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
@@ -37,6 +38,15 @@ import MonthlyChart from '../components/MonthlyChart';
 import ForecastSection from '../components/ForecastSection';
 import FadeIn from '../components/FadeIn';
 import { formatDate, filterByThisMonth, filterByLast30Days, filterByAll, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
+import { useSnackbar } from '../contexts/SnackbarContext';
+import InstallmentsModal from '../components/InstallmentsModal';
+import InstallmentGroupsModal from '../components/InstallmentGroupsModal';
+import DeleteConfirmSheet from '../components/DeleteConfirmSheet';
+import { scheduleReminders } from '../utils/notifications';
+import { getBudgets } from '../utils/budgets';
+import currencyService from '../services/currency';
+import { getCurrencyByCode } from '../constants/currencies';
+import { runAutoBackupIfDue } from '../utils/backup';
 
 export default function HomeScreen() {
     const [expenses, setExpenses] = useState([]);
@@ -48,16 +58,34 @@ export default function HomeScreen() {
     const [detailExpense, setDetailExpense] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
+    const [installmentGroupToEdit, setInstallmentGroupToEdit] = useState(null);
+    const [prefillExpense, setPrefillExpense] = useState(null);
+    const [installmentsVisible, setInstallmentsVisible] = useState(false);
+    const [installmentGroupsVisible, setInstallmentGroupsVisible] = useState(false);
+    const [installmentGroup, setInstallmentGroup] = useState([]);
+    const [installmentTitle, setInstallmentTitle] = useState('');
+    const [deleting, setDeleting] = useState(false);
+    const [deleteExpense, setDeleteExpense] = useState(null);
+    const [deleteIsInstallment, setDeleteIsInstallment] = useState(false);
 
     const { language, t } = useLanguage();
     const { colors } = useTheme();
     const { currency } = useCurrency();
+    const { showSuccess } = useSnackbar();
 
     const [filter, setFilter] = useState('thisMonth');
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [sortBy, setSortBy] = useState('newest');
     const [showSortMenu, setShowSortMenu] = useState(false);
+    const [quickFilter, setQuickFilter] = useState('all');
+    const [monthlySummary, setMonthlySummary] = useState({
+        budgetTotalEUR: null,
+        budgetRemainingEUR: null,
+        forecastEUR: 0,
+        spentEUR: 0,
+    });
+    const [summaryLoading, setSummaryLoading] = useState(false);
 
     useEffect(() => {
         loadExpenses();
@@ -70,20 +98,39 @@ export default function HomeScreen() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    const loadExpenses = async () => {
+    useEffect(() => {
+        scheduleReminders({ expenses, subscriptions, t }).catch((error) => {
+            console.error('Error scheduling reminders:', error);
+        });
+    }, [expenses, subscriptions, t]);
+
+    useEffect(() => {
+        loadMonthlySummary();
+    }, [expenses, subscriptions]);
+
+    useFocusEffect(
+        useCallback(() => {
+            runAutoBackupIfDue().catch((error) => {
+                console.error('Error running auto backup:', error);
+            });
+        }, [])
+    );
+
+    const loadExpenses = async ({ silent = false } = {}) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const [data, subData] = await Promise.all([
                 expenseService.getAll(),
                 subscriptionService.getAll(),
             ]);
             setExpenses(data);
             setSubscriptions(subData);
+            return data;
         } catch (error) {
             Alert.alert(t('error'), t('couldNotLoad'));
             console.error(error);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
             setRefreshing(false);
         }
     };
@@ -93,15 +140,258 @@ export default function HomeScreen() {
         loadExpenses();
     };
 
-    const handleDeleteExpense = async (id) => {
+    const getInstallmentMeta = (expense) => {
+        const description = expense?.description?.trim();
+        const match = description?.match(/\((\d+)\/(\d+)\)$/);
+        if (!match) return null;
+        const base = description.replace(/\s*\(\d+\/\d+\)$/, '').trim();
+        return {
+            index: parseInt(match[1], 10),
+            total: parseInt(match[2], 10),
+            base,
+        };
+    };
+
+    const isInstallmentExpense = (expense) => /\((\d+)\/(\d+)\)$/.test(expense?.description || '');
+    const isSubscriptionExpense = (expense) => expense?.description?.includes('(Subscription)');
+
+    const getInstallmentStartKey = (expense, meta) => {
+        if (!expense?.date || !meta) return null;
+        const date = new Date(expense.date);
+        const start = new Date(date);
+        start.setMonth(start.getMonth() - (meta.index - 1));
+        return start.toISOString().split('T')[0];
+    };
+
+    const getInstallmentGroup = (expense, sourceExpenses = expenses) => {
+        const target = getInstallmentMeta(expense);
+        if (!target) return [];
+        const targetStartKey = getInstallmentStartKey(expense, target);
+
+        return sourceExpenses
+            .map((exp) => {
+                const meta = getInstallmentMeta(exp);
+                if (!meta) return null;
+                const startKey = getInstallmentStartKey(exp, meta);
+                return {
+                    ...exp,
+                    _installmentIndex: meta.index,
+                    _installmentTotal: meta.total,
+                    _installmentBase: meta.base,
+                    _installmentStartKey: startKey,
+                };
+            })
+            .filter(Boolean)
+            .filter((exp) => (
+                exp._installmentBase === target.base
+                && exp._installmentTotal === target.total
+                && (exp.currency || 'EUR') === (expense.currency || 'EUR')
+                && exp._installmentStartKey === targetStartKey
+            ))
+            .sort((a, b) => a._installmentIndex - b._installmentIndex);
+    };
+
+    const loadMonthlySummary = async () => {
+        setSummaryLoading(true);
         try {
-            await expenseService.delete(id);
-            loadExpenses();
-            Alert.alert(t('deleted'), t('expenseDeleted'));
+            const monthExpenses = filterByThisMonth(expenses);
+            const convertedExpenses = await Promise.all(
+                monthExpenses.map(async (exp) => {
+                    const amount = Number(exp.amount) || 0;
+                    const amountEUR = exp.currency && exp.currency !== 'EUR'
+                        ? await currencyService.convertToEUR(amount, exp.currency)
+                        : amount;
+                    return { ...exp, _amountEUR: amountEUR };
+                })
+            );
+
+            const spentEUR = convertedExpenses.reduce((sum, exp) => sum + (exp._amountEUR || 0), 0);
+            const installmentsEUR = convertedExpenses
+                .filter((exp) => isInstallmentExpense(exp))
+                .reduce((sum, exp) => sum + (exp._amountEUR || 0), 0);
+
+            const activeSubscriptions = (subscriptions || []).filter((sub) => sub.active);
+            const subscriptionsEUR = (await Promise.all(
+                activeSubscriptions.map(async (sub) => {
+                    const amount = Number(sub.amount) || 0;
+                    const amountEUR = sub.currency && sub.currency !== 'EUR'
+                        ? await currencyService.convertToEUR(amount, sub.currency)
+                        : amount;
+                    let monthly = amountEUR;
+                    if (sub.frequency === 'WEEKLY') monthly *= 4.33;
+                    if (sub.frequency === 'YEARLY') monthly /= 12;
+                    return monthly;
+                })
+            )).reduce((sum, val) => sum + (val || 0), 0);
+
+            const budgets = await getBudgets();
+            const budgetEntries = Object.values(budgets || {});
+            const budgetTotalEUR = (await Promise.all(
+                budgetEntries.map(async (budget) => {
+                    if (!budget?.limit) return 0;
+                    const limit = Number(budget.limit) || 0;
+                    return budget.currency && budget.currency !== 'EUR'
+                        ? await currencyService.convertToEUR(limit, budget.currency)
+                        : limit;
+                })
+            )).reduce((sum, val) => sum + (val || 0), 0);
+
+            setMonthlySummary({
+                budgetTotalEUR: budgetEntries.length > 0 ? budgetTotalEUR : null,
+                budgetRemainingEUR: budgetEntries.length > 0 ? (budgetTotalEUR - spentEUR) : null,
+                forecastEUR: installmentsEUR + subscriptionsEUR,
+                spentEUR,
+            });
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotDelete'));
+            console.error('Error loading monthly summary:', error);
+        } finally {
+            setSummaryLoading(false);
         }
     };
+
+    const withTimeout = (promise, timeoutMs = 12000) => {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('timeout')), timeoutMs);
+            }),
+        ]);
+    };
+
+    const deleteExpensesByIds = async (ids, successMessage, afterDelete) => {
+        if (!ids || ids.length === 0) {
+            Alert.alert(t('error'), t('couldNotDelete'));
+            return;
+        }
+        setDeleting(true);
+        const idsSet = new Set(ids);
+        const optimistic = expenses.filter((exp) => !idsSet.has(exp.id));
+        setExpenses(optimistic);
+        if (afterDelete) {
+            afterDelete(optimistic);
+        }
+
+        try {
+            const results = await Promise.allSettled(
+                ids.map((expenseId) => withTimeout(expenseService.delete(expenseId)))
+            );
+            const hasFailure = results.some((result) => result.status === 'rejected');
+            if (hasFailure) {
+                Alert.alert(t('error'), t('couldNotDelete'));
+            } else {
+                showSuccess(successMessage);
+            }
+        } catch (error) {
+            Alert.alert(t('error'), t('couldNotDelete'));
+        } finally {
+            setDeleting(false);
+        }
+
+        loadExpenses({ silent: true });
+    };
+
+    const handleDeleteExpense = async (id) => {
+        await deleteExpensesByIds([id], t('expenseDeleted'));
+    };
+
+    const handleDeleteInstallments = async (expense, mode) => {
+        const meta = getInstallmentMeta(expense);
+        if (!meta) {
+            await handleDeleteExpense(expense.id);
+            return;
+        }
+
+        const group = getInstallmentGroup(expense);
+        const ids = mode === 'remaining'
+            ? group.filter((item) => item._installmentIndex >= meta.index).map((item) => item.id)
+            : [expense.id];
+
+        await deleteExpensesByIds(
+            ids,
+            mode === 'remaining' ? t('installmentsDeleted') : t('installmentDeleted'),
+            (updatedExpenses) => {
+                const refreshedGroup = getInstallmentGroup(expense, updatedExpenses);
+                setInstallmentGroup(refreshedGroup);
+                if (refreshedGroup.length === 0) {
+                    setInstallmentsVisible(false);
+                }
+            }
+        );
+    };
+
+    const closeDeleteSheet = () => {
+        setDeleteExpense(null);
+        setDeleteIsInstallment(false);
+    };
+
+    const openDeleteConfirm = (expense) => {
+        const meta = getInstallmentMeta(expense);
+        setDeleteIsInstallment(!!meta);
+        setDeleteExpense(expense);
+    };
+
+    const openInstallments = (expense) => {
+        const meta = getInstallmentMeta(expense);
+        const group = getInstallmentGroup(expense);
+        setInstallmentTitle(meta?.base || expense.description || '');
+        setInstallmentGroup(group);
+        setInstallmentsVisible(true);
+    };
+
+    const handleEditInstallmentGroup = (groupItems) => {
+        if (!groupItems || groupItems.length === 0) return;
+        setInstallmentsVisible(false);
+        setInstallmentGroupsVisible(false);
+        setExpenseToEdit(null);
+        setPrefillExpense(null);
+        setInstallmentGroupToEdit(groupItems);
+        setShowAddModal(true);
+    };
+
+    const installmentGroups = useMemo(() => {
+        const now = new Date();
+        const groups = new Map();
+
+        expenses.forEach((exp) => {
+            const meta = getInstallmentMeta(exp);
+            if (!meta) return;
+            const startKey = getInstallmentStartKey(exp, meta);
+
+            const key = [
+                meta.base,
+                meta.total,
+                exp.currency || 'EUR',
+                startKey || '',
+            ].join('|');
+
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    key,
+                    title: meta.base,
+                    totalCount: meta.total,
+                    startKey,
+                    items: [],
+                });
+            }
+
+            groups.get(key).items.push({
+                ...exp,
+                _installmentIndex: meta.index,
+                _installmentTotal: meta.total,
+                _installmentBase: meta.base,
+                _installmentStartKey: startKey,
+            });
+        });
+
+        return Array.from(groups.values()).map((group) => {
+            group.items.sort((a, b) => a._installmentIndex - b._installmentIndex);
+            const nextItem = group.items.find((item) => new Date(item.date) >= now) || group.items[group.items.length - 1];
+            return {
+                ...group,
+                nextDate: nextItem?.date,
+            };
+        }).sort((a, b) => new Date(a.nextDate || 0) - new Date(b.nextDate || 0));
+    }, [expenses]);
 
     const handleCategoryPress = (category) => {
         setSelectedCategory(category);
@@ -169,13 +459,52 @@ export default function HomeScreen() {
         });
     };
 
+    const applyQuickFilter = (expensesToFilter) => {
+        if (quickFilter === 'installments') {
+            return expensesToFilter.filter((exp) => isInstallmentExpense(exp));
+        }
+        if (quickFilter === 'subscriptions') {
+            return expensesToFilter.filter((exp) => isSubscriptionExpense(exp));
+        }
+        if (quickFilter === 'due7') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const nextWeek = new Date(today);
+            nextWeek.setDate(nextWeek.getDate() + 7);
+            return expensesToFilter.filter((exp) => {
+                const expDate = new Date(exp.date);
+                return expDate >= today && expDate <= nextWeek;
+            });
+        }
+        return expensesToFilter;
+    };
+
     const getFilteredExpenses = () => {
         const dateFiltered = getDateFilteredExpenses();
-        return getSearchFilteredExpenses(dateFiltered);
+        const searchFiltered = getSearchFilteredExpenses(dateFiltered);
+        return applyQuickFilter(searchFiltered);
     };
 
     const filteredExpenses = getFilteredExpenses();
     const filteredTotal = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    const quickAddItems = useMemo(() => {
+        const unique = [];
+        const seen = new Set();
+        const sorted = sortByNewest(expenses);
+
+        for (const exp of sorted) {
+            if (!exp?.description) continue;
+            if (isInstallmentExpense(exp) || isSubscriptionExpense(exp)) continue;
+            const key = `${exp.description}|${exp.amount}|${exp.currency || 'EUR'}|${exp.category || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            unique.push(exp);
+            if (unique.length >= 6) break;
+        }
+
+        return unique;
+    }, [expenses]);
 
     const filteredGrouped = filteredExpenses.reduce((acc, exp) => {
         const category = normalizeCategory(exp.category);
@@ -203,16 +532,142 @@ export default function HomeScreen() {
 
     const handleEditExpense = (expense) => {
         setExpenseToEdit(expense);
+        setInstallmentGroupToEdit(null);
+        setPrefillExpense(null);
         setShowAddModal(true);
         setShowCategoryModal(false);
+    };
+
+    const handleQuickAdd = (expense) => {
+        setExpenseToEdit(null);
+        setInstallmentGroupToEdit(null);
+        setPrefillExpense({
+            description: expense.description?.replace(/\s*\(\d+\/\d+\)$/, '').trim(),
+            amount: expense.amount,
+            currency: expense.currency || 'EUR',
+            category: expense.category || '',
+        });
+        setShowAddModal(true);
     };
 
     const handleCloseModal = () => {
         setShowAddModal(false);
         setExpenseToEdit(null);
+        setInstallmentGroupToEdit(null);
+        setPrefillExpense(null);
     };
 
     const styles = createStyles(colors);
+
+    const summaryCard = (
+        <View style={styles.summaryCard}>
+            <View style={styles.summaryHeader}>
+                <View style={styles.summaryTitleRow}>
+                    <Ionicons name="calendar-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                    <Text style={styles.summaryTitle}>{t('monthlySummary')}</Text>
+                </View>
+                {summaryLoading && <ActivityIndicator size="small" color={colors.primary} />}
+            </View>
+
+            <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{t('budgetRemaining')}</Text>
+                {monthlySummary.budgetRemainingEUR !== null ? (
+                    <CurrencyDisplay
+                        amountInEUR={monthlySummary.budgetRemainingEUR}
+                        style={styles.summaryValue}
+                    />
+                ) : (
+                    <Text style={styles.summaryPlaceholder}>--</Text>
+                )}
+            </View>
+
+            <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{t('forecastedSpending')}</Text>
+                <CurrencyDisplay
+                    amountInEUR={monthlySummary.forecastEUR}
+                    style={styles.summaryValue}
+                />
+            </View>
+
+            {monthlySummary.budgetTotalEUR !== null && (
+                <View style={styles.summaryMetaRow}>
+                    <Text style={styles.summaryMetaLabel}>{t('budgetTotal')}</Text>
+                    <CurrencyDisplay
+                        amountInEUR={monthlySummary.budgetTotalEUR}
+                        style={styles.summaryMetaValue}
+                    />
+                </View>
+            )}
+        </View>
+    );
+
+    const quickAddSection = quickAddItems.length > 0 ? (
+        <View style={styles.quickAddSection}>
+            <View style={styles.quickAddHeader}>
+                <Ionicons name="flash-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                <View style={styles.quickAddHeaderText}>
+                    <Text style={styles.quickAddTitle}>{t('quickAdd')}</Text>
+                    <Text style={styles.quickAddHint}>{t('quickAddHint')}</Text>
+                </View>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.quickAddRow}>
+                    {quickAddItems.map((item) => {
+                        const symbol = getCurrencyByCode(item.currency || 'EUR').symbol;
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={styles.quickAddChip}
+                                onPress={() => handleQuickAdd(item)}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.quickAddChipTitle} numberOfLines={1}>
+                                    {item.description}
+                                </Text>
+                                <Text style={styles.quickAddChipAmount}>
+                                    {symbol}{Number(item.amount).toFixed(2)}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            </ScrollView>
+        </View>
+    ) : null;
+
+    const quickFilters = [
+        { key: 'all', label: t('all') },
+        { key: 'installments', label: t('filterInstallments') },
+        { key: 'subscriptions', label: t('filterSubscriptions') },
+        { key: 'due7', label: t('filterDue7Days') },
+    ];
+
+    const quickFiltersRow = (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.quickFiltersRow}>
+                {quickFilters.map((filterOption) => (
+                    <TouchableOpacity
+                        key={filterOption.key}
+                        style={[
+                            styles.quickFilterChip,
+                            quickFilter === filterOption.key && styles.quickFilterChipActive,
+                        ]}
+                        onPress={() => setQuickFilter(filterOption.key)}
+                        activeOpacity={0.8}
+                    >
+                        <Text
+                            style={[
+                                styles.quickFilterText,
+                                quickFilter === filterOption.key && styles.quickFilterTextActive,
+                            ]}
+                        >
+                            {filterOption.label}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </ScrollView>
+    );
 
     if (loading) {
         return (
@@ -273,11 +728,14 @@ export default function HomeScreen() {
                 )}
             </View>
 
-            {/* Conteúdo */}
+            {/* Conte?do */}
             <ScrollView
                 style={styles.content}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
+                {quickFiltersRow}
+                {summaryCard}
+                {quickAddSection}
                 {expenses.length === 0 ? (
                     <View style={styles.emptyState}>
                         <Ionicons name="mail-open-outline" size={64} color={colors.textLight} />
@@ -336,6 +794,7 @@ export default function HomeScreen() {
                                 </Text>
                             </TouchableOpacity>
                         </View>
+
                     </View>
                 ) : (
                     <View style={styles.chartSection}>
@@ -488,7 +947,12 @@ export default function HomeScreen() {
 
                         {/* Previsão de Gastos */}
                         <FadeIn delay={400}>
-                            <ForecastSection expenses={expenses} subscriptions={subscriptions} />
+                            <ForecastSection
+                                expenses={expenses}
+                                subscriptions={subscriptions}
+                                installmentGroups={installmentGroups}
+                                onOpenInstallments={() => setInstallmentGroupsVisible(true)}
+                            />
                         </FadeIn>
 
                         {/* Gráfico de Evolução Mensal */}
@@ -594,16 +1058,7 @@ export default function HomeScreen() {
                                         </TouchableOpacity>
                                         <TouchableOpacity
                                             style={styles.swipeDeleteButton}
-                                            onPress={() => {
-                                                Alert.alert(t('confirm'), t('deleteConfirm'), [
-                                                    { text: t('cancel'), style: 'cancel' },
-                                                    {
-                                                        text: t('delete'),
-                                                        style: 'destructive',
-                                                        onPress: () => handleDeleteExpense(item.id),
-                                                    },
-                                                ]);
-                                            }}
+                                            onPress={() => openDeleteConfirm(item)}
                                         >
                                             <Ionicons name="trash-outline" size={24} color="#FFF" />
                                         </TouchableOpacity>
@@ -640,14 +1095,13 @@ export default function HomeScreen() {
                 onDelete={(expense) => {
                     setDetailExpense(null);
                     setTimeout(() => {
-                        Alert.alert(t('confirm'), t('deleteConfirm'), [
-                            { text: t('cancel'), style: 'cancel' },
-                            {
-                                text: t('delete'),
-                                style: 'destructive',
-                                onPress: () => handleDeleteExpense(expense.id),
-                            },
-                        ]);
+                        openDeleteConfirm(expense);
+                    }, 300);
+                }}
+                onViewInstallments={(expense) => {
+                    setDetailExpense(null);
+                    setTimeout(() => {
+                        openInstallments(expense);
                     }, 300);
                 }}
             />
@@ -658,10 +1112,75 @@ export default function HomeScreen() {
                 onClose={handleCloseModal}
                 onSuccess={loadExpenses}
                 expenseToEdit={expenseToEdit}
+                installmentGroupToEdit={installmentGroupToEdit}
+                prefillExpense={prefillExpense}
             />
 
+            <InstallmentGroupsModal
+                visible={installmentGroupsVisible}
+                groups={installmentGroups}
+                onClose={() => setInstallmentGroupsVisible(false)}
+                onSelectGroup={(group) => {
+                    setInstallmentGroupsVisible(false);
+                    setInstallmentTitle(group.title);
+                    setInstallmentGroup(group.items);
+                    setInstallmentsVisible(true);
+                }}
+            />
+
+            <InstallmentsModal
+                visible={installmentsVisible}
+                title={installmentTitle}
+                installments={installmentGroup}
+                onClose={() => setInstallmentsVisible(false)}
+                onDeleteInstallment={handleDeleteInstallments}
+                onEditGroup={() => handleEditInstallmentGroup(installmentGroup)}
+            />
+
+            <DeleteConfirmSheet
+                visible={!!deleteExpense}
+                isInstallment={deleteIsInstallment}
+                onClose={closeDeleteSheet}
+                onDelete={() => {
+                    const target = deleteExpense;
+                    closeDeleteSheet();
+                    if (target) {
+                        handleDeleteExpense(target.id);
+                    }
+                }}
+                onDeleteSingle={() => {
+                    const target = deleteExpense;
+                    closeDeleteSheet();
+                    if (target) {
+                        handleDeleteInstallments(target, 'single');
+                    }
+                }}
+                onDeleteRemaining={() => {
+                    const target = deleteExpense;
+                    closeDeleteSheet();
+                    if (target) {
+                        handleDeleteInstallments(target, 'remaining');
+                    }
+                }}
+            />
+
+            {deleting && (
+                <View style={styles.deletingToast} pointerEvents="none">
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={styles.deletingText}>{t('loading')}</Text>
+                </View>
+            )}
+
             {/* FAB */}
-            <TouchableOpacity style={styles.fabWrapper} onPress={() => setShowAddModal(true)} activeOpacity={0.85}>
+            <TouchableOpacity
+                style={styles.fabWrapper}
+                onPress={() => {
+                    setInstallmentGroupToEdit(null);
+                    setPrefillExpense(null);
+                    setShowAddModal(true);
+                }}
+                activeOpacity={0.85}
+            >
                 <LinearGradient
                     colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
                     start={{ x: 0, y: 0 }}
@@ -744,6 +1263,24 @@ const createStyles = (colors) => StyleSheet.create({
         fontSize: fontSize.lg,
         fontFamily: fontFamily.medium,
         color: colors.textLight,
+    },
+    deletingToast: {
+        position: 'absolute',
+        bottom: spacing.xxl + sizes.fabSize + spacing.sm,
+        alignSelf: 'center',
+        backgroundColor: colors.surface,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.full,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        ...shadows.small,
+    },
+    deletingText: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.medium,
+        color: colors.text,
     },
     emptyState: {
         alignItems: 'center',
@@ -960,6 +1497,147 @@ const createStyles = (colors) => StyleSheet.create({
         paddingVertical: spacing.md,
         borderRadius: borderRadius.lg,
         ...shadows.medium,
+    },
+    summaryCard: {
+        backgroundColor: colors.surface,
+        marginHorizontal: spacing.xl,
+        marginBottom: spacing.md,
+        padding: spacing.lg,
+        borderRadius: borderRadius.xl,
+        ...shadows.small,
+    },
+    summaryHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.md,
+    },
+    summaryTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    summaryTitle: {
+        fontSize: fontSize.lg,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
+    },
+    summaryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: spacing.xs,
+    },
+    summaryLabel: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.medium,
+        color: colors.textLight,
+    },
+    summaryValue: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
+    },
+    summaryPlaceholder: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.semibold,
+        color: colors.textLight,
+    },
+    summaryMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+        paddingTop: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    summaryMetaLabel: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+    },
+    summaryMetaValue: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+    },
+    quickFiltersRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        paddingHorizontal: spacing.xl,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.md,
+    },
+    quickFilterChip: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    quickFilterChipActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    quickFilterText: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+    },
+    quickFilterTextActive: {
+        color: colors.textWhite,
+    },
+    quickAddSection: {
+        marginHorizontal: spacing.xl,
+        marginBottom: spacing.md,
+        padding: spacing.lg,
+        borderRadius: borderRadius.xl,
+        backgroundColor: colors.surface,
+        ...shadows.small,
+    },
+    quickAddHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    quickAddHeaderText: {
+        flex: 1,
+    },
+    quickAddTitle: {
+        fontSize: fontSize.base,
+        fontFamily: fontFamily.bold,
+        color: colors.text,
+    },
+    quickAddHint: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
+        marginTop: 2,
+    },
+    quickAddRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    quickAddChip: {
+        backgroundColor: colors.background,
+        borderRadius: borderRadius.lg,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        minWidth: 140,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    quickAddChipTitle: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.semibold,
+        color: colors.text,
+        marginBottom: spacing.xs,
+    },
+    quickAddChipAmount: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.bold,
+        color: colors.primary,
     },
     searchInput: {
         flex: 1,

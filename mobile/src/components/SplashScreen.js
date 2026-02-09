@@ -1,13 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, StyleSheet, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { translate } from '../constants/translations';
 
 export default function SplashScreen({ onFinish, fontsReady }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.8)).current;
+    const [subtitle, setSubtitle] = useState('Controle Inteligente');
 
     useEffect(() => {
+        AsyncStorage.getItem('@language').then((lang) => {
+            const language = lang || 'pt';
+            setSubtitle(translate(language, 'splashSubtitle'));
+        }).catch(() => {});
+
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
@@ -56,7 +64,7 @@ export default function SplashScreen({ onFinish, fontsReady }) {
                     <Ionicons name="wallet" size={56} color="#FFFFFF" />
                 </View>
                 <Text style={styles.title}>CashWise</Text>
-                <Text style={styles.subtitle}>Controle Inteligente</Text>
+                <Text style={styles.subtitle}>{subtitle}</Text>
             </Animated.View>
 
             <View style={styles.loaderContainer}>
