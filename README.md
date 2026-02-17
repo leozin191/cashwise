@@ -94,7 +94,7 @@ A full-stack personal finance application with **AI-powered expense categorizati
 | Java 21 | Language |
 | Spring Boot 4.0 | Framework |
 | Spring Data JPA | ORM |
-| H2 Database | File-based persistent storage |
+| PostgreSQL | Relational database |
 | Spring Scheduler | Automatic subscription processing |
 | Groq AI API | Llama 3.3-70b for categorization |
 | Maven | Build tool |
@@ -160,6 +160,8 @@ A full-stack personal finance application with **AI-powered expense categorizati
 - Java 21+
 - Node.js 18+
 - Maven
+- PostgreSQL 14+
+- Docker Desktop (optional, recommended)
 - Expo Go app on your phone
 - Groq API Key (free at https://console.groq.com)
 
@@ -174,8 +176,23 @@ cd CashWise
 # Set your Groq API key
 export GROQ_API_KEY=your_key_here
 
+# Configure PostgreSQL (adjust as needed)
+export DB_URL=jdbc:postgresql://localhost:5432/cashwise
+export DB_USER=cashwise
+export DB_PASSWORD=cashwise
+export DB_NAME=cashwise
+
 # Or create a .env file (not committed to git)
-echo "GROQ_API_KEY=your_key_here" > .env
+cat > .env <<'EOF'
+GROQ_API_KEY=your_key_here
+DB_URL=jdbc:postgresql://localhost:5432/cashwise
+DB_USER=cashwise
+DB_PASSWORD=cashwise
+DB_NAME=cashwise
+EOF
+
+# Start PostgreSQL with Docker (recommended)
+docker compose up -d
 
 # Run the backend
 ./mvnw spring-boot:run
@@ -292,9 +309,9 @@ CashWise/
 - Input validation: NaN/negative amount checks on expenses, subscriptions, and budgets
 - Description fields have 200-character length limits
 - API client uses 15-second request timeout
-- H2 console and debug settings are enabled for development only
+- Database credentials are loaded from environment variables (`${DB_URL}`, `${DB_USER}`, `${DB_PASSWORD}`)
 - CORS is open (`*`) for development — restrict in production
-- Database files (`/data/`) are excluded from version control
+- Avoid committing any local database credentials or dumps
 
 ---
 

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+﻿import { useRef } from 'react';
 import {
     View,
     Text,
@@ -12,11 +12,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useCurrency } from '../contexts/CurrencyContext';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
 import { normalizeCategory, getCategoryColor } from '../constants/categories';
 import CategoryIcon from './CategoryIcon';
 import CurrencyDisplay from './CurrencyDisplay';
+import { getCurrencyByCode } from '../constants/currencies';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DISMISS_THRESHOLD = 120;
@@ -24,7 +24,6 @@ const DISMISS_THRESHOLD = 120;
 export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, onDelete, onViewInstallments }) {
     const { colors } = useTheme();
     const { t, language } = useLanguage();
-    const { getCurrencyInfo } = useCurrency();
 
     const translateY = useRef(new Animated.Value(0)).current;
 
@@ -65,6 +64,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
     const category = normalizeCategory(expense.category);
     const categoryColor = getCategoryColor(category);
     const isSubscription = expense.description?.includes('(Subscription)');
+    const expenseCurrency = getCurrencyByCode(expense.currency || 'EUR');
 
     const installmentMatch = expense.description?.match(/\((\d+)\/(\d+)\)$/);
     const isInstallment = !!installmentMatch;
@@ -112,10 +112,9 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
             >
                 <View style={styles.handleBar} />
 
-                {/* Category icon header */}
                 <View style={styles.iconHeader}>
                     <View style={styles.bigIcon}>
-                        <CategoryIcon category={category} size={36} color="#FFF" />
+                        <CategoryIcon category={category} size={36} color={colors.textWhite} />
                     </View>
                     {isSubscription && (
                         <View style={styles.subscriptionBadge}>
@@ -133,19 +132,16 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     )}
                 </View>
 
-                {/* Description */}
                 <Text style={styles.description}>
                     {expense.description?.replace(' (Subscription)', '').replace(/\s*\(\d+\/\d+\)$/, '')}
                 </Text>
 
-                {/* Amount */}
                 <CurrencyDisplay
                     amountInEUR={expense.amount}
                     originalCurrency={expense.currency}
                     style={styles.amount}
                 />
 
-                {/* Details grid */}
                 <View style={styles.detailsCard}>
                     <View style={styles.detailRow}>
                         <View style={styles.detailLabelRow}>
@@ -160,7 +156,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     <View style={styles.detailRow}>
                         <View style={styles.detailLabelRow}>
                             <Ionicons name="calendar-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
-                            <Text style={styles.detailLabel}>{language === 'pt' ? 'Data' : 'Date'}</Text>
+                            <Text style={styles.detailLabel}>{t('date')}</Text>
                         </View>
                         <Text style={styles.detailValue}>{formatFullDate(expense.date)}</Text>
                     </View>
@@ -170,7 +166,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     <View style={styles.detailRow}>
                         <View style={styles.detailLabelRow}>
                             <Ionicons name="time-outline" size={16} color={colors.textLight} style={{ marginRight: spacing.sm }} />
-                            <Text style={styles.detailLabel}>{language === 'pt' ? 'Adicionado' : 'Added'}</Text>
+                            <Text style={styles.detailLabel}>{t('added')}</Text>
                         </View>
                         <Text style={styles.detailValue}>{formatTime(expense.createdAt)}</Text>
                     </View>
@@ -183,7 +179,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                             <Text style={styles.detailLabel}>{t('currency')}</Text>
                         </View>
                         <Text style={styles.detailValue}>
-                            {getCurrencyInfo().flag} {expense.currency || 'EUR'} — {getCurrencyInfo().symbol}{parseFloat(expense.amount).toFixed(2)}
+                            {expenseCurrency.flag} {expense.currency || 'EUR'} — {expenseCurrency.symbol}{parseFloat(expense.amount).toFixed(2)}
                         </Text>
                     </View>
 
@@ -196,7 +192,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                                     <Text style={styles.detailLabel}>{t('installment')}</Text>
                                 </View>
                                 <Text style={styles.detailValue}>
-                                    {installmentMatch[1]} / {installmentMatch[2]} — {t('totalValue')}: {getCurrencyInfo().symbol}{(parseFloat(expense.amount) * parseInt(installmentMatch[2])).toFixed(2)}
+                                    {installmentMatch[1]} / {installmentMatch[2]} — {t('totalValue')}: {expenseCurrency.symbol}{(parseFloat(expense.amount) * parseInt(installmentMatch[2])).toFixed(2)}
                                 </Text>
                             </View>
                         </>
@@ -214,7 +210,6 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
                     </TouchableOpacity>
                 )}
 
-                {/* Action Buttons */}
                 {(onEdit || onDelete) && (
                     <View style={styles.actionButtons}>
                         {onEdit && (
@@ -248,7 +243,7 @@ export default function ExpenseDetailModal({ visible, expense, onClose, onEdit, 
 const createStyles = (colors, categoryColor) => StyleSheet.create({
     overlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: colors.overlay,
     },
     overlayTouch: {
         flex: 1,

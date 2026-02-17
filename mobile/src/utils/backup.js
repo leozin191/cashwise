@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { expenseService, subscriptionService } from '../services/api';
+import * as FileSystem from 'expo-file-system/legacy';
+import { expenseService, incomeService, subscriptionService } from '../services/api';
 import { getBudgets } from './budgets';
 
 const AUTO_BACKUP_ENABLED_KEY = '@auto_backup_enabled';
@@ -31,11 +31,22 @@ export async function setAutoBackupEnabled(enabled) {
 }
 
 export async function createBackupPayload() {
+    const warnings = [];
     const expenses = await expenseService.getAll();
+
+    let incomes = [];
+    try {
+        incomes = await incomeService.getAll();
+    } catch (error) {
+        warnings.push('incomes');
+    }
+
     let subscriptions = [];
     try {
         subscriptions = await subscriptionService.getAll();
-    } catch (error) {}
+    } catch (error) {
+        warnings.push('subscriptions');
+    }
 
     const budgets = await getBudgets();
     const [language, currency, theme] = await Promise.all([
@@ -45,9 +56,10 @@ export async function createBackupPayload() {
     ]);
 
     return {
-        version: 1,
+        version: 2,
         exportDate: new Date().toISOString(),
         expenses,
+        incomes,
         subscriptions,
         budgets,
         settings: {
@@ -55,6 +67,7 @@ export async function createBackupPayload() {
             currency,
             theme,
         },
+        ...(warnings.length > 0 && { warnings }),
     };
 }
 
@@ -86,11 +99,15 @@ export async function loadAutoBackupPayload() {
     const exists = await FileSystem.getInfoAsync(AUTO_BACKUP_PATH);
     if (!exists.exists) return null;
     const content = await FileSystem.readAsStringAsync(AUTO_BACKUP_PATH, { encoding: 'utf8' });
-    return JSON.parse(content);
+    try {
+        return JSON.parse(content);
+    } catch {
+        return null;
+    }
 }
 
 export async function restoreBackupPayload(backup) {
-    if (!backup?.version || !backup?.expenses) {
+    if (!backup?.version || !Array.isArray(backup?.expenses)) {
         throw new Error('invalid-backup');
     }
 
@@ -104,17 +121,26 @@ export async function restoreBackupPayload(backup) {
         await expenseService.create(data);
     }
 
-    if (backup.subscriptions?.length > 0) {
-        try {
-            const existingSubs = await subscriptionService.getAll();
-            for (const sub of existingSubs) {
-                await subscriptionService.delete(sub.id);
-            }
-            for (const sub of backup.subscriptions) {
-                const { id, createdAt, updatedAt, ...data } = sub;
-                await subscriptionService.create(data);
-            }
-        } catch (error) {}
+    if (Array.isArray(backup.incomes) && backup.incomes.length > 0) {
+        const existingIncomes = await incomeService.getAll();
+        for (const inc of existingIncomes) {
+            await incomeService.delete(inc.id);
+        }
+        for (const inc of backup.incomes) {
+            const { id, createdAt, updatedAt, ...data } = inc;
+            await incomeService.create(data);
+        }
+    }
+
+    if (Array.isArray(backup.subscriptions) && backup.subscriptions.length > 0) {
+        const existingSubs = await subscriptionService.getAll();
+        for (const sub of existingSubs) {
+            await subscriptionService.delete(sub.id);
+        }
+        for (const sub of backup.subscriptions) {
+            const { id, createdAt, updatedAt, ...data } = sub;
+            await subscriptionService.create(data);
+        }
     }
 
     if (backup.budgets) {

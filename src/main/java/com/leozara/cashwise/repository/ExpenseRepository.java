@@ -1,26 +1,37 @@
 package com.leozara.cashwise.repository;
 
 import com.leozara.cashwise.model.Expense;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
-    // Métodos customizados (o Spring cria automaticamente!)
+    List<Expense> findByUserId(Long userId);
 
-    // Buscar gastos por categoria
-    List<Expense> findByCategory(String category);
+    Page<Expense> findByUserId(Long userId, Pageable pageable);
 
-    // Buscar gastos por data
-    List<Expense> findByDate(LocalDate date);
+    Optional<Expense> findByIdAndUserId(Long id, Long userId);
 
-    // Buscar gastos entre duas datas
-    List<Expense> findByDateBetween(LocalDate startDate, LocalDate endDate);
+    List<Expense> findByCategoryAndUserId(String category, Long userId);
 
-    // Buscar gastos por moeda
-    List<Expense> findByCurrency(String currency);
+    List<Expense> findByDateAndUserId(LocalDate date, Long userId);
+
+    List<Expense> findByDateBetweenAndUserId(LocalDate startDate, LocalDate endDate, Long userId);
+
+    List<Expense> findByCurrencyAndUserId(String currency, Long userId);
+
+    boolean existsByGroupId(String groupId);
+
+    @Modifying
+    @Query("DELETE FROM Expense e WHERE e.userId = :userId")
+    void deleteByUserId(Long userId);
 }

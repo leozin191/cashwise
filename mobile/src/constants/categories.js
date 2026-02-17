@@ -108,13 +108,13 @@ export function getCategoryColor(category) {
 
 export const CATEGORY_MAP_PT_TO_EN = {
     'Lazer': 'Entertainment',
-    'AlimentaÃ§Ã£o': 'Groceries',
+    'Alimentação': 'Groceries',
     'Transporte': 'Transport',
     'Outros': 'General',
     'Compras': 'Shopping',
     'Moradia': 'Utilities',
-    'SaÃºde': 'Health',
-    'EducaÃ§Ã£o': 'Services',
+    'Saúde': 'Health',
+    'Educação': 'Services',
     'Comida': 'Food',
 };
 

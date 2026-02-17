@@ -63,6 +63,7 @@ const getAlertColor = (level) => {
 
 export function generateReportHTML({
     expenses = [],
+    incomes = [],
     subscriptions = [],
     budgets = {},
     forecast = [],
@@ -81,6 +82,12 @@ export function generateReportHTML({
     const totalExpenses = Number.isFinite(stats.totalExpenses)
         ? stats.totalExpenses
         : expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const totalIncome = Number.isFinite(stats.totalIncome)
+        ? stats.totalIncome
+        : incomes.reduce((sum, inc) => sum + (inc.amount || 0), 0);
+    const balanceTotal = Number.isFinite(stats.balanceTotal)
+        ? stats.balanceTotal
+        : totalIncome - totalExpenses;
     const transactionCount = Number.isFinite(stats.transactionCount)
         ? stats.transactionCount
         : expenses.length;
@@ -88,7 +95,7 @@ export function generateReportHTML({
     const highestExpense = stats.highestExpense || null;
     const topCategory = stats.topCategory || null;
     const reportDate = formatLongDate(new Date(), locale);
-    const periodLabel = getPeriodLabel(expenses, locale, safeT);
+    const periodLabel = getPeriodLabel(expenses.length > 0 ? expenses : incomes, locale, safeT);
 
     const groupedByCategory = expenses.reduce((acc, exp) => {
         const category = exp.category || 'Other';
@@ -215,6 +222,19 @@ export function generateReportHTML({
                 <td>${escapeHtml(exp.description)}</td>
                 <td>${escapeHtml(resolveCategoryLabel(exp.category))}</td>
                 <td>${formatAmount(exp.amount, currencySymbol)}</td>
+            </tr>
+        `)
+        .join('');
+
+    const incomeRows = incomes
+        .slice()
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .map((inc) => `
+            <tr>
+                <td>${formatDate(inc.date, locale)}</td>
+                <td>${escapeHtml(inc.description)}</td>
+                <td>${escapeHtml(resolveCategoryLabel(inc.category))}</td>
+                <td>${formatAmount(inc.amount, currencySymbol)}</td>
             </tr>
         `)
         .join('');
@@ -382,6 +402,14 @@ export function generateReportHTML({
                             <div class="summary-value">${formatAmount(totalExpenses, currencySymbol)}</div>
                         </div>
                         <div class="summary-card">
+                            <div class="summary-label">${escapeHtml(safeT('totalIncome'))}</div>
+                            <div class="summary-value">${formatAmount(totalIncome, currencySymbol)}</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">${escapeHtml(safeT('totalBalance'))}</div>
+                            <div class="summary-value">${formatAmount(balanceTotal, currencySymbol)}</div>
+                        </div>
+                        <div class="summary-card">
                             <div class="summary-label">${escapeHtml(safeT('transactionCount'))}</div>
                             <div class="summary-value">${transactionCount}</div>
                         </div>
@@ -491,6 +519,25 @@ export function generateReportHTML({
                             </tbody>
                         </table>
                     ` : `<div class="muted">${escapeHtml(safeT('noUpcomingCosts'))}</div>`}
+                </div>
+
+                <div class="section">
+                    <div class="section-title">${escapeHtml(safeT('incomeList'))}</div>
+                    ${incomeRows ? `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>${escapeHtml(safeT('date'))}</th>
+                                    <th>${escapeHtml(safeT('description'))}</th>
+                                    <th>${escapeHtml(safeT('category'))}</th>
+                                    <th>${escapeHtml(safeT('amount'))}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${incomeRows}
+                            </tbody>
+                        </table>
+                    ` : `<div class="muted">${escapeHtml(safeT('noIncomes'))}</div>`}
                 </div>
 
                 <div class="section">

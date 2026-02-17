@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+﻿import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
@@ -21,7 +21,7 @@ const createStyles = (colors) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: spacing.sm,
-            backgroundColor: colors.warning + '1A',
+            backgroundColor: colors.warningBg,
             borderWidth: 1,
             borderColor: colors.warning + '55',
             paddingVertical: spacing.sm,

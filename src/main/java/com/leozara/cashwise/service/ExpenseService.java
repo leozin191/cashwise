@@ -1,13 +1,16 @@
 package com.leozara.cashwise.service;
 
+import com.leozara.cashwise.exception.ResourceNotFoundException;
 import com.leozara.cashwise.model.Expense;
 import com.leozara.cashwise.repository.ExpenseRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -16,60 +19,64 @@ public class ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final AiService aiService;
 
-    // Criar novo gasto
-    public Expense createExpense(Expense expense) {
+    @Transactional
+    public Expense createExpense(Expense expense, Long userId) {
         if (expense.getCategory() == null || expense.getCategory().isEmpty()) {
             String suggestedCategory = aiService.suggestCategory(expense.getDescription());
             expense.setCategory(suggestedCategory);
         }
+        expense.setUserId(userId);
         return expenseRepository.save(expense);
     }
 
-    // Buscar todos os gastos
-    public List<Expense> getAllExpenses() {
-        return expenseRepository.findAll();
+    public List<Expense> getAllExpenses(Long userId) {
+        return expenseRepository.findByUserId(userId);
     }
 
-    // Buscar gasto por ID
-    public Optional<Expense> getExpenseById(Long id) {
-        return expenseRepository.findById(id);
+    public Page<Expense> getAllExpenses(Long userId, Pageable pageable) {
+        return expenseRepository.findByUserId(userId, pageable);
     }
 
-    // Atualizar gasto
-    public Expense updateExpense(Long id, Expense expenseDetails) {
-        Expense expense = expenseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Gasto não encontrado com ID: " + id));
+    public Expense getExpenseById(Long id, Long userId) {
+        return expenseRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found with ID: " + id));
+    }
+
+    @Transactional
+    public Expense updateExpense(Long id, Expense expenseDetails, Long userId) {
+        Expense expense = expenseRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found with ID: " + id));
 
         expense.setDescription(expenseDetails.getDescription());
         expense.setAmount(expenseDetails.getAmount());
         expense.setCurrency(expenseDetails.getCurrency());
         expense.setDate(expenseDetails.getDate());
         expense.setCategory(expenseDetails.getCategory());
+        expense.setGroupId(expenseDetails.getGroupId());
 
         return expenseRepository.save(expense);
     }
 
-    // Deletar gasto
-    public void deleteExpense(Long id) {
-        expenseRepository.deleteById(id);
+    @Transactional
+    public void deleteExpense(Long id, Long userId) {
+        Expense expense = expenseRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found with ID: " + id));
+        expenseRepository.delete(expense);
     }
 
-    // Buscar por categoria
-    public List<Expense> getExpensesByCategory(String category) {
-        return expenseRepository.findByCategory(category);
+    public List<Expense> getExpensesByCategory(String category, Long userId) {
+        return expenseRepository.findByCategoryAndUserId(category, userId);
     }
 
-    // Buscar por período
-    public List<Expense> getExpensesByDateRange(LocalDate startDate, LocalDate endDate) {
-        return expenseRepository.findByDateBetween(startDate, endDate);
+    public List<Expense> getExpensesByDateRange(LocalDate startDate, LocalDate endDate, Long userId) {
+        return expenseRepository.findByDateBetweenAndUserId(startDate, endDate, userId);
     }
 
-    // Buscar por moeda
-    public List<Expense> getExpensesByCurrency(String currency) {
-        return expenseRepository.findByCurrency(currency);
+    public List<Expense> getExpensesByCurrency(String currency, Long userId) {
+        return expenseRepository.findByCurrencyAndUserId(currency, userId);
     }
 
-    public List<Expense> getExpensesByDate(LocalDate date) {
-        return expenseRepository.findByDate(date);
+    public List<Expense> getExpensesByDate(LocalDate date, Long userId) {
+        return expenseRepository.findByDateAndUserId(date, userId);
     }
 }

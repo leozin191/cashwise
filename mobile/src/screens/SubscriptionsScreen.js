@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     TouchableWithoutFeedback,
@@ -18,7 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
+import { spacing } from '../constants/theme';
+import { createStyles } from './subscriptionsStyles';
 import { normalizeCategory } from '../constants/categories';
 import CategoryIcon from '../components/CategoryIcon';
 import { subscriptionService, expenseService } from '../services/api';
@@ -30,7 +30,7 @@ const FREQUENCIES = ['MONTHLY', 'WEEKLY', 'YEARLY'];
 
 export default function SubscriptionsScreen() {
     const { colors } = useTheme();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
     const { showSuccess } = useSnackbar();
 
@@ -84,7 +84,7 @@ export default function SubscriptionsScreen() {
     const formatDate = (dateString) => {
         if (!dateString) return '—';
         const date = new Date(dateString);
-        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return date.toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
     const getFrequencyLabel = (freq) => {
@@ -119,7 +119,7 @@ export default function SubscriptionsScreen() {
             Alert.alert(t('attention'), t('enterDescription'));
             return;
         }
-        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        if (!amount || !Number.isFinite(parseFloat(amount)) || parseFloat(amount) <= 0) {
             Alert.alert(t('attention'), t('enterValidAmount'));
             return;
         }
@@ -181,7 +181,7 @@ export default function SubscriptionsScreen() {
             await subscriptionService.toggle(sub.id);
             await loadSubscriptions();
         } catch (error) {
-            Alert.alert(t('error'), 'Could not toggle subscription');
+            Alert.alert(t('error'), t('couldNotSave'));
         }
     };
 
@@ -220,7 +220,6 @@ export default function SubscriptionsScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
             <LinearGradient
                 colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
                 start={{ x: 0, y: 0 }}
@@ -291,8 +290,7 @@ export default function SubscriptionsScreen() {
                     ))
                 )}
 
-                {/* Botão Adicionar */}
-                <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
+                <TouchableOpacity style={styles.addButton} onPress={openAddModal} accessibilityLabel={t('addSubscription')} accessibilityRole="button">
                     <Ionicons name="add-circle" size={22} color={colors.primary} style={{ marginRight: spacing.sm }} />
                     <Text style={styles.addButtonText}>{t('addSubscription')}</Text>
                 </TouchableOpacity>
@@ -300,7 +298,6 @@ export default function SubscriptionsScreen() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Modal Adicionar/Editar */}
             <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
                 <View style={styles.modalOverlay}>
                     <TouchableWithoutFeedback onPress={() => setShowModal(false)}>
@@ -318,7 +315,6 @@ export default function SubscriptionsScreen() {
                         </View>
 
                         <ScrollView style={styles.modalContent}>
-                            {/* Descrição */}
                             <Text style={styles.label}>{t('description')}</Text>
                             <TextInput
                                 style={styles.input}
@@ -329,7 +325,6 @@ export default function SubscriptionsScreen() {
                                 maxLength={200}
                             />
 
-                            {/* Valor */}
                             <Text style={styles.label}>{t('amount')}</Text>
                             <View style={styles.amountContainer}>
                                 <Text style={styles.currencySymbol}>{getCurrencyInfo().symbol}</Text>
@@ -343,7 +338,6 @@ export default function SubscriptionsScreen() {
                                 />
                             </View>
 
-                            {/* Frequência */}
                             <Text style={styles.label}>{t('frequency')}</Text>
                             <View style={styles.frequencyRow}>
                                 {FREQUENCIES.map((freq) => (
@@ -359,7 +353,6 @@ export default function SubscriptionsScreen() {
                                 ))}
                             </View>
 
-                            {/* Dia do mês */}
                             <Text style={styles.label}>{t('dayOfMonth')}</Text>
                             <TextInput
                                 style={styles.input}
@@ -373,7 +366,6 @@ export default function SubscriptionsScreen() {
                                 keyboardType="number-pad"
                             />
 
-                            {/* Categoria */}
                             <Text style={styles.label}>{t('category')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
                                 {['Entertainment', 'Services', 'Health', 'Transport', 'Food', 'Utilities', 'Insurance', 'General'].map((cat) => (
@@ -382,7 +374,7 @@ export default function SubscriptionsScreen() {
                                         style={[styles.catChip, selectedCategory === cat && styles.catChipActive]}
                                         onPress={() => setSelectedCategory(cat)}
                                     >
-                                        <CategoryIcon category={cat} size={18} color={selectedCategory === cat ? '#FFF' : colors.primary} />
+                                        <CategoryIcon category={cat} size={18} color={selectedCategory === cat ? colors.textWhite : colors.primary} />
                                         <Text style={[styles.catText, selectedCategory === cat && styles.catTextActive]}>
                                             {t(`categories.${cat}`)}
                                         </Text>
@@ -390,7 +382,6 @@ export default function SubscriptionsScreen() {
                                 ))}
                             </ScrollView>
 
-                            {/* Botão Salvar */}
                             <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
                                 <Text style={styles.saveButtonText}>{t('save')}</Text>
                             </TouchableOpacity>
@@ -409,148 +400,3 @@ export default function SubscriptionsScreen() {
         </View>
     );
 }
-
-const createStyles = (colors) => StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    centerContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.background,
-        gap: spacing.md,
-    },
-    header: {
-        paddingTop: 60,
-        paddingBottom: spacing.xl,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: borderRadius.xxl,
-        borderBottomRightRadius: borderRadius.xxl,
-    },
-    headerTitle: { fontSize: fontSize.xxxl, fontFamily: fontFamily.bold, color: colors.textWhite },
-    loadingText: { fontSize: fontSize.lg, fontFamily: fontFamily.medium, color: colors.textLight },
-    headerStats: { marginTop: spacing.md },
-    headerLabel: { fontSize: fontSize.sm, fontFamily: fontFamily.medium, color: 'rgba(255,255,255,0.7)' },
-    headerAmount: { fontSize: fontSize.xxl, fontFamily: fontFamily.bold, color: colors.textWhite },
-    content: { flex: 1, paddingTop: spacing.lg },
-    emptyState: { alignItems: 'center', paddingVertical: spacing.xxxl * 2 },
-    emptyText: { fontSize: fontSize.xl, fontFamily: fontFamily.bold, color: colors.text, marginBottom: spacing.sm, marginTop: spacing.lg },
-    emptySubtext: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, textAlign: 'center' },
-    card: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        marginHorizontal: spacing.xl,
-        marginBottom: spacing.md,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        ...shadows.medium,
-    },
-    cardInactive: { opacity: 0.5 },
-    cardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    iconContainer: {
-        width: 44,
-        height: 44,
-        borderRadius: borderRadius.full,
-        backgroundColor: colors.primaryBg,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: spacing.md,
-    },
-    iconInactive: { backgroundColor: colors.border },
-    cardInfo: { flex: 1, marginRight: spacing.sm },
-    cardTitle: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.text, marginBottom: 2 },
-    textInactive: { color: colors.textLight },
-    cardSubtext: { fontSize: fontSize.xs, fontFamily: fontFamily.regular, color: colors.textLight },
-    cardRight: { alignItems: 'flex-end' },
-    cardAmount: { fontSize: fontSize.lg, fontFamily: fontFamily.bold, color: colors.primary, marginBottom: spacing.xs },
-    switch: { transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] },
-    addButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.surface,
-        marginHorizontal: spacing.xl,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        borderWidth: 2,
-        borderStyle: 'dashed',
-        borderColor: colors.primary,
-        marginTop: spacing.sm,
-    },
-    addButtonText: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.primary },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    overlayTouchArea: { flex: 1 },
-    handleBar: { width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
-    modal: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xxxl, borderTopRightRadius: borderRadius.xxxl, maxHeight: '85%' },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: spacing.xl,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    modalTitle: { fontSize: fontSize.xxl, fontFamily: fontFamily.bold, color: colors.text },
-    closeButton: { fontSize: fontSize.huge, color: colors.textLight, fontWeight: fontWeight.light },
-    modalContent: { padding: spacing.xl },
-    label: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.text, marginBottom: spacing.sm, marginTop: spacing.lg },
-    input: {
-        backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: borderRadius.md,
-        padding: spacing.lg,
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.regular,
-        color: colors.text,
-    },
-    amountContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: borderRadius.md,
-        paddingLeft: spacing.lg,
-    },
-    currencySymbol: { fontSize: fontSize.xl, fontFamily: fontFamily.semibold, color: colors.primary, marginRight: spacing.sm },
-    amountInput: { flex: 1, padding: spacing.lg, fontSize: fontSize.xl, fontFamily: fontFamily.semibold, color: colors.text },
-    frequencyRow: { flexDirection: 'row', gap: spacing.sm },
-    freqButton: {
-        flex: 1,
-        paddingVertical: spacing.md,
-        borderRadius: borderRadius.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-        alignItems: 'center',
-        backgroundColor: colors.background,
-    },
-    freqButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    freqText: { fontSize: fontSize.sm, fontFamily: fontFamily.semibold, color: colors.textLight },
-    freqTextActive: { color: colors.textWhite },
-    categoriesScroll: { marginBottom: spacing.md },
-    catChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-        borderRadius: borderRadius.xl,
-        borderWidth: 1,
-        borderColor: colors.border,
-        marginRight: spacing.sm,
-        backgroundColor: colors.background,
-    },
-    catChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    catText: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, marginLeft: spacing.xs },
-    catTextActive: { color: colors.textWhite },
-    saveButton: {
-        backgroundColor: colors.primary,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        alignItems: 'center',
-        marginTop: spacing.xl,
-        ...shadows.colored,
-    },
-    saveButtonText: { color: colors.textWhite, fontSize: fontSize.lg, fontFamily: fontFamily.bold },
-});

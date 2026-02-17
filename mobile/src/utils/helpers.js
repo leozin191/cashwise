@@ -26,7 +26,8 @@ export function calculatePercentage(value, total) {
     return total > 0 ? ((value / total) * 100).toFixed(0) : 0;
 }
 
-export function filterByThisMonth(expenses) {
+export function filterByThisMonth(expenses = []) {
+    if (!Array.isArray(expenses)) return [];
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -40,7 +41,8 @@ export function filterByThisMonth(expenses) {
     });
 }
 
-export function filterByLast30Days(expenses) {
+export function filterByLast30Days(expenses = []) {
+    if (!Array.isArray(expenses)) return [];
     const now = new Date();
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(now.getDate() - 30);
@@ -51,33 +53,33 @@ export function filterByLast30Days(expenses) {
     });
 }
 
-export function filterByAll(expenses) {
-    return expenses;
+export function filterByAll(expenses = []) {
+    return Array.isArray(expenses) ? expenses : [];
 }
 
-export function sortByNewest(expenses) {
-    return [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+export function sortByNewest(expenses = []) {
+    return [...(Array.isArray(expenses) ? expenses : [])].sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-export function sortByOldest(expenses) {
-    return [...expenses].sort((a, b) => new Date(a.date) - new Date(b.date));
+export function sortByOldest(expenses = []) {
+    return [...(Array.isArray(expenses) ? expenses : [])].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-export function sortByHighest(expenses) {
-    return [...expenses].sort((a, b) => b.amount - a.amount);
+export function sortByHighest(expenses = []) {
+    return [...(Array.isArray(expenses) ? expenses : [])].sort((a, b) => b.amount - a.amount);
 }
 
-export function sortByLowest(expenses) {
-    return [...expenses].sort((a, b) => a.amount - b.amount);
+export function sortByLowest(expenses = []) {
+    return [...(Array.isArray(expenses) ? expenses : [])].sort((a, b) => a.amount - b.amount);
 }
 
-export function getHighestExpense(expenses) {
-    if (expenses.length === 0) return null;
+export function getHighestExpense(expenses = []) {
+    if (!Array.isArray(expenses) || expenses.length === 0) return null;
     return expenses.reduce((max, exp) => exp.amount > max.amount ? exp : max);
 }
 
-export function getAveragePerDay(expenses, startDate, endDate) {
-    if (expenses.length === 0) return 0;
+export function getAveragePerDay(expenses = [], startDate, endDate) {
+    if (!Array.isArray(expenses) || expenses.length === 0) return 0;
 
     const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
@@ -91,8 +93,8 @@ export function getAveragePerDay(expenses, startDate, endDate) {
     return total / days;
 }
 
-export function getTopCategory(expenses) {
-    if (expenses.length === 0) return null;
+export function getTopCategory(expenses = []) {
+    if (!Array.isArray(expenses) || expenses.length === 0) return null;
 
     const grouped = expenses.reduce((acc, exp) => {
         const category = exp.category || 'Other';
@@ -112,7 +114,8 @@ export function getTopCategory(expenses) {
     };
 }
 
-export function groupByMonth(expenses) {
+export function groupByMonth(expenses = []) {
+    if (!Array.isArray(expenses)) return {};
     const grouped = {};
 
     expenses.forEach((exp) => {
@@ -163,12 +166,14 @@ export function getNextNMonths(n = 3, language = 'pt') {
     return months;
 }
 
-export function calculateForecast(expenses, subscriptions, language = 'pt') {
+export function calculateForecast(expenses = [], subscriptions = [], language = 'pt') {
     const nextMonths = getNextNMonths(3, language);
     const installmentRegex = /\((\d+)\/(\d+)\)$/;
+    const safeExpenses = Array.isArray(expenses) ? expenses : [];
+    const safeSubscriptions = Array.isArray(subscriptions) ? subscriptions : [];
 
     return nextMonths.map((monthInfo) => {
-        const installmentExpenses = expenses.filter((exp) => {
+        const installmentExpenses = safeExpenses.filter((exp) => {
             const d = new Date(exp.date);
             return d.getMonth() === monthInfo.month
                 && d.getFullYear() === monthInfo.year
@@ -176,7 +181,7 @@ export function calculateForecast(expenses, subscriptions, language = 'pt') {
         });
         const installmentsTotal = installmentExpenses.reduce((s, e) => s + e.amount, 0);
 
-        const activeSubscriptions = (subscriptions || []).filter(s => s.active);
+        const activeSubscriptions = safeSubscriptions.filter(s => s.active);
         let subscriptionsTotal = 0;
         activeSubscriptions.forEach((sub) => {
             let monthly = parseFloat(sub.amount);

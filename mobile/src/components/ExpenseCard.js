@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+﻿import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { normalizeCategory } from '../constants/categories';
 import { formatDate } from '../utils/helpers';
@@ -49,13 +49,13 @@ export default function ExpenseCard({ expense }) {
                     )}
                 </View>
             </View>
-            <View>
+            <View style={styles.right}>
                 <CurrencyDisplay
                     amountInEUR={expense.amount}
                     originalCurrency={expense.currency}
                     style={styles.amount}
                 />
-                {expense.currency && expense.currency !== currency && (
+                {!!expense.currency && expense.currency !== currency && (
                     <Text style={styles.originalAmount}>
                         ({getCurrencyByCode(expense.currency).symbol}{expense.amount.toFixed(2)} {expense.currency})
                     </Text>
@@ -104,8 +104,13 @@ const createStyles = (colors) => StyleSheet.create({
         fontFamily: fontFamily.regular,
         color: colors.textLight,
     },
+    right: {
+        flexShrink: 0,
+        alignItems: 'flex-end',
+        maxWidth: '35%',
+    },
     amount: {
-        fontSize: fontSize.lg + 1,
+        fontSize: fontSize.base,
         fontFamily: fontFamily.bold,
         color: colors.text,
     },

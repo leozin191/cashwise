@@ -1,4 +1,4 @@
-import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+﻿import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -11,6 +11,8 @@ export default function DeleteConfirmSheet({
     onDelete,
     onDeleteSingle,
     onDeleteRemaining,
+    title,
+    message,
 }) {
     const { colors } = useTheme();
     const { t } = useLanguage();
@@ -18,8 +20,8 @@ export default function DeleteConfirmSheet({
 
     if (!visible) return null;
 
-    const title = isInstallment ? t('deleteInstallmentTitle') : t('delete');
-    const message = isInstallment ? t('deleteInstallmentMessage') : t('deleteConfirm');
+    const titleText = title || (isInstallment ? t('deleteInstallmentTitle') : t('delete'));
+    const messageText = message || (isInstallment ? t('deleteInstallmentMessage') : t('deleteConfirm'));
 
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -32,11 +34,11 @@ export default function DeleteConfirmSheet({
                     <View style={styles.handleBar} />
 
                     <View style={styles.header}>
-                        <View style={[styles.iconWrap, { backgroundColor: colors.error + '15' }]}>
+                        <View style={[styles.iconWrap, { backgroundColor: colors.errorBg }]}>
                             <Ionicons name="trash-outline" size={22} color={colors.error} />
                         </View>
-                        <Text style={styles.title}>{title}</Text>
-                        {message ? <Text style={styles.message}>{message}</Text> : null}
+                        <Text style={styles.title}>{titleText}</Text>
+                        {messageText ? <Text style={styles.message}>{messageText}</Text> : null}
                     </View>
 
                     <View style={styles.actions}>
@@ -96,7 +98,7 @@ const createStyles = (colors) =>
     StyleSheet.create({
         overlay: {
             flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backgroundColor: colors.overlay,
             justifyContent: 'flex-end',
         },
         overlayTouch: {

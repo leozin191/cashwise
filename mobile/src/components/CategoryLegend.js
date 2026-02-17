@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+﻿import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { getCategoryColor } from '../constants/categories';
 import { calculatePercentage } from '../utils/helpers';
 import { spacing, borderRadius, fontSize, fontFamily } from '../constants/theme';
@@ -7,7 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import CurrencyDisplay from './CurrencyDisplay';
 import CategoryIcon from './CategoryIcon';
 
-export default function CategoryLegend({ category, amount, total, onPress }) {
+export default function CategoryLegend({ category, amount, total, onPress, originalCurrency }) {
     const { t } = useLanguage();
     const { colors } = useTheme();
     const percentage = calculatePercentage(amount, total);
@@ -21,20 +21,26 @@ export default function CategoryLegend({ category, amount, total, onPress }) {
             activeOpacity={0.7}
         >
             <View style={styles.topRow}>
-                <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
-                    <CategoryIcon category={category} size={18} color={color} />
+                <View style={styles.leftRow}>
+                    <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
+                        <CategoryIcon category={category} size={16} color={color} />
+                    </View>
+                    <Text style={styles.name} numberOfLines={1}>
+                        {t(`categories.${category}`)}
+                    </Text>
                 </View>
-                <View style={styles.info}>
-                    <Text style={styles.name}>{t(`categories.${category}`)}</Text>
+                <View style={styles.rightRow}>
+                    <CurrencyDisplay
+                        amountInEUR={amount}
+                        originalCurrency={originalCurrency}
+                        style={styles.amount}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                    />
                     <Text style={styles.percent}>{percentage}%</Text>
                 </View>
-                <CurrencyDisplay
-                    amountInEUR={amount}
-                    style={styles.amount}
-                />
             </View>
 
-            {/* Progress bar */}
             <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: color }]} />
             </View>
@@ -44,7 +50,7 @@ export default function CategoryLegend({ category, amount, total, onPress }) {
 
 const createStyles = (colors) => StyleSheet.create({
     item: {
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.sm,
         paddingHorizontal: spacing.md,
         borderRadius: borderRadius.md,
         marginBottom: spacing.sm,
@@ -53,37 +59,45 @@ const createStyles = (colors) => StyleSheet.create({
     topRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: spacing.sm,
+        justifyContent: 'space-between',
+        marginBottom: spacing.xs,
     },
     iconContainer: {
-        width: 36,
-        height: 36,
+        width: 28,
+        height: 28,
         borderRadius: borderRadius.md,
         alignItems: 'center',
         justifyContent: 'center',
+        marginRight: spacing.sm,
     },
-    info: {
+    leftRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         flex: 1,
-        marginLeft: spacing.md,
+        minWidth: 0,
     },
     name: {
-        fontSize: fontSize.base,
+        fontSize: fontSize.sm,
         fontFamily: fontFamily.semibold,
         color: colors.text,
     },
+    rightRow: {
+        alignItems: 'flex-end',
+        marginLeft: spacing.sm,
+    },
     percent: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.regular,
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.medium,
         color: colors.textLight,
-        marginTop: 1,
+        marginTop: 2,
     },
     amount: {
-        fontSize: fontSize.lg,
+        fontSize: fontSize.base,
         fontFamily: fontFamily.bold,
         color: colors.text,
     },
     progressTrack: {
-        height: 4,
+        height: 3,
         backgroundColor: colors.border,
         borderRadius: borderRadius.full,
         overflow: 'hidden',

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+﻿import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -15,6 +15,7 @@ export default function ForecastSection({
     subscriptions,
     installmentGroups = [],
     onOpenInstallments,
+    onPressSubscriptions,
 }) {
     const { colors } = useTheme();
     const { language, t } = useLanguage();
@@ -24,7 +25,30 @@ export default function ForecastSection({
 
     useEffect(() => {
         const convertData = async () => {
-            const forecast = calculateForecast(expenses, subscriptions, language);
+            const safeExpenses = Array.isArray(expenses) ? expenses : [];
+            const safeSubscriptions = Array.isArray(subscriptions) ? subscriptions : [];
+
+            const convertedExpenses = await Promise.all(
+                safeExpenses.map(async (exp) => {
+                    const amount = Number(exp.amount) || 0;
+                    const amountEUR = exp.currency && exp.currency !== 'EUR'
+                        ? await currencyService.convertToEUR(amount, exp.currency)
+                        : amount;
+                    return { ...exp, amount: amountEUR, currency: 'EUR' };
+                })
+            );
+
+            const convertedSubscriptions = await Promise.all(
+                safeSubscriptions.map(async (sub) => {
+                    const amount = Number(sub.amount) || 0;
+                    const amountEUR = sub.currency && sub.currency !== 'EUR'
+                        ? await currencyService.convertToEUR(amount, sub.currency)
+                        : amount;
+                    return { ...sub, amount: amountEUR, currency: 'EUR' };
+                })
+            );
+
+            const forecast = calculateForecast(convertedExpenses, convertedSubscriptions, language);
             const converted = await Promise.all(
                 forecast.map(async (m) => ({
                     ...m,
@@ -44,6 +68,8 @@ export default function ForecastSection({
     const nextInstallmentDate = hasInstallmentGroups ? installmentGroups[0].nextDate : null;
     const InstallmentsCard = onOpenInstallments ? TouchableOpacity : View;
     const installmentsCardProps = onOpenInstallments ? { onPress: onOpenInstallments, activeOpacity: 0.7 } : {};
+    const SubscriptionsRow = onPressSubscriptions ? TouchableOpacity : View;
+    const subscriptionsRowProps = onPressSubscriptions ? { onPress: onPressSubscriptions, activeOpacity: 0.7 } : {};
 
     const formatShortDate = (dateString) => {
         if (!dateString) return '-';
@@ -84,14 +110,12 @@ export default function ForecastSection({
 
     return (
         <View style={styles.container}>
-            {/* Title */}
             <View style={styles.titleRow}>
                 <Ionicons name="telescope-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
                 <Text style={styles.title}>{t('forecast')}</Text>
                 <Text style={styles.subtitle}>{t('forecastSubtitle')}</Text>
             </View>
 
-            {/* Month Tabs */}
             <View style={styles.tabsRow}>
                 {forecastData.map((month, index) => (
                     <TouchableOpacity
@@ -110,26 +134,31 @@ export default function ForecastSection({
                 ))}
             </View>
 
-            {/* Detail */}
             {hasData ? (
                 <View style={styles.detailContainer}>
-                    {/* Subscriptions row */}
-                    <View style={styles.detailRow}>
+                    <SubscriptionsRow style={styles.detailRow} {...subscriptionsRowProps}>
                         <View style={styles.detailLeft}>
-                            <View style={[styles.detailIconCircle, { backgroundColor: colors.primary + '20' }]}>
+                            <View style={[styles.detailIconCircle, { backgroundColor: colors.primaryBg }]}>
                                 <Ionicons name="repeat-outline" size={16} color={colors.primary} />
                             </View>
                             <Text style={styles.detailLabel}>{t('subscriptionsTotal')}</Text>
+                            {onPressSubscriptions && (
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={14}
+                                    color={colors.textLight}
+                                    style={{ marginLeft: spacing.xs }}
+                                />
+                            )}
                         </View>
                         <Text style={styles.detailValue}>
                             {currencySymbol}{selected.subscriptionsConverted.toFixed(2)}
                         </Text>
-                    </View>
+                    </SubscriptionsRow>
 
-                    {/* Installments row */}
                     <View style={styles.detailRow}>
                         <View style={styles.detailLeft}>
-                            <View style={[styles.detailIconCircle, { backgroundColor: colors.warning + '20' }]}>
+                            <View style={[styles.detailIconCircle, { backgroundColor: colors.warningBg }]}>
                                 <Ionicons name="card-outline" size={16} color={colors.warning} />
                             </View>
                             <Text style={styles.detailLabel}>{t('installmentsTotal')}</Text>
@@ -139,13 +168,11 @@ export default function ForecastSection({
                         </Text>
                     </View>
 
-                    {/* Separator */}
                     <View style={styles.separator} />
 
-                    {/* Total row */}
                     <View style={styles.detailRow}>
                         <View style={styles.detailLeft}>
-                            <View style={[styles.detailIconCircle, { backgroundColor: colors.success + '20' }]}>
+                            <View style={[styles.detailIconCircle, { backgroundColor: colors.successBg }]}>
                                 <Ionicons name="wallet-outline" size={16} color={colors.success} />
                             </View>
                             <Text style={styles.totalLabel}>{t('forecastTotal')}</Text>
@@ -166,7 +193,7 @@ export default function ForecastSection({
             {hasInstallmentGroups && (
                 <InstallmentsCard style={styles.installmentsCard} {...installmentsCardProps}>
                     <View style={styles.installmentsLeft}>
-                        <View style={[styles.installmentsIcon, { backgroundColor: colors.warning + '20' }]}>
+                        <View style={[styles.installmentsIcon, { backgroundColor: colors.warningBg }]}>
                             <Ionicons name="card-outline" size={16} color={colors.warning} />
                         </View>
                         <View style={styles.installmentsInfo}>

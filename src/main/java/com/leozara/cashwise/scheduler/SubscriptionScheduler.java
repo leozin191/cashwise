@@ -16,11 +16,10 @@ public class SubscriptionScheduler {
 
     private final SubscriptionService subscriptionService;
 
-    // Roda todo dia às 00:05
     @Scheduled(cron = "0 5 0 * * *")
     public void processDaily() {
         log.info("Processing subscriptions...");
-        List<Expense> created = subscriptionService.processSubscriptions();
+        List<Expense> created = subscriptionService.processAllDueSubscriptions();
         log.info("Created {} expenses from subscriptions", created.size());
     }
 }

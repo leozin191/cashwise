@@ -1,8 +1,8 @@
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+﻿import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 
 export default function InstallmentGroupsModal({ visible, groups = [], onClose, onSelectGroup }) {
     const { colors } = useTheme();
@@ -72,7 +72,7 @@ const createStyles = (colors) =>
     StyleSheet.create({
         overlay: {
             flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.45)',
+            backgroundColor: colors.overlay,
             justifyContent: 'flex-end',
         },
         overlayTouch: {
@@ -110,7 +110,7 @@ const createStyles = (colors) =>
         closeButton: {
             fontSize: fontSize.huge,
             color: colors.textLight,
-            fontWeight: '300',
+            fontWeight: fontWeight.light,
         },
         list: {
             marginTop: spacing.sm,

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     TouchableWithoutFeedback,
@@ -11,25 +10,30 @@ import {
     Modal,
     TextInput,
     ActivityIndicator,
-    Dimensions,
+    useWindowDimensions,
+    SectionList,
 } from 'react-native';
 
 import { PieChart } from 'react-native-gifted-charts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { SwipeListView } from 'react-native-swipe-list-view';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { expenseService, subscriptionService } from '../services/api';
+import { expenseService, incomeService, subscriptionService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
 import ExpenseDetailModal from '../components/ExpenseDetailModal';
+import IncomeDetailModal from '../components/IncomeDetailModal';
 import CategoryLegend from '../components/CategoryLegend';
 import AddExpenseModal from '../components/AddExpenseModal';
+import AddIncomeModal from '../components/AddIncomeModal';
+import HomeSummaryCard from '../components/HomeSummaryCard';
+import HomeIncomeSection from '../components/HomeIncomeSection';
+import HomeQuickAdd from '../components/HomeQuickAdd';
 
 import { CATEGORY_COLORS, normalizeCategory } from '../constants/categories';
 
-import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows, sizes } from '../constants/theme';
+import { spacing } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -47,16 +51,32 @@ import { getBudgets } from '../utils/budgets';
 import currencyService from '../services/currency';
 import { getCurrencyByCode } from '../constants/currencies';
 import { runAutoBackupIfDue } from '../utils/backup';
+import { addDataChangedListener } from '../services/dataEvents';
+
+import {
+    getInstallmentMeta,
+    isInstallmentExpense,
+    isSubscriptionExpense,
+    buildInstallmentGroupMap,
+    getInstallmentGroup,
+} from '../utils/installments';
+import { createStyles } from './homeStyles';
 
 export default function HomeScreen() {
+    const navigation = useNavigation();
+    const returnToScreen = 'Home';
     const [expenses, setExpenses] = useState([]);
+    const [incomes, setIncomes] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [detailExpense, setDetailExpense] = useState(null);
+    const [detailIncome, setDetailIncome] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showIncomeModal, setShowIncomeModal] = useState(false);
+    const [incomeToEdit, setIncomeToEdit] = useState(null);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
     const [installmentGroupToEdit, setInstallmentGroupToEdit] = useState(null);
     const [prefillExpense, setPrefillExpense] = useState(null);
@@ -67,6 +87,8 @@ export default function HomeScreen() {
     const [deleting, setDeleting] = useState(false);
     const [deleteExpense, setDeleteExpense] = useState(null);
     const [deleteIsInstallment, setDeleteIsInstallment] = useState(false);
+    const [deleteIncome, setDeleteIncome] = useState(null);
+    const [showAllIncomes, setShowAllIncomes] = useState(false);
 
     const { language, t } = useLanguage();
     const { colors } = useTheme();
@@ -74,8 +96,12 @@ export default function HomeScreen() {
     const { showSuccess } = useSnackbar();
 
     const [filter, setFilter] = useState('thisMonth');
+    const [incomePeriodFilter, setIncomePeriodFilter] = useState('thisMonth');
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
+    const [incomeSearchQuery, setIncomeSearchQuery] = useState('');
+    const [debouncedIncomeQuery, setDebouncedIncomeQuery] = useState('');
+    const [incomeCategoryFilter, setIncomeCategoryFilter] = useState('all');
     const [sortBy, setSortBy] = useState('newest');
     const [showSortMenu, setShowSortMenu] = useState(false);
     const [quickFilter, setQuickFilter] = useState('all');
@@ -83,12 +109,27 @@ export default function HomeScreen() {
         budgetTotalEUR: null,
         budgetRemainingEUR: null,
         forecastEUR: 0,
+        incomeEUR: 0,
         spentEUR: 0,
+        balanceEUR: 0,
+        totalsByCurrency: {},
     });
     const [summaryLoading, setSummaryLoading] = useState(false);
+    const [filteredTotals, setFilteredTotals] = useState({ expensesEUR: 0, incomeEUR: 0 });
+    const [convertedFilteredExpenses, setConvertedFilteredExpenses] = useState([]);
 
     useEffect(() => {
         loadExpenses();
+    }, []);
+
+    useEffect(() => {
+        const subscription = addDataChangedListener((event) => {
+            if (!event || event.type === 'expenses' || event.type === 'incomes' || event.type === 'subscriptions' || event.type === 'all') {
+                loadExpenses({ silent: true });
+            }
+        });
+
+        return () => subscription.remove();
     }, []);
 
     useEffect(() => {
@@ -99,6 +140,13 @@ export default function HomeScreen() {
     }, [searchQuery]);
 
     useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedIncomeQuery(incomeSearchQuery);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [incomeSearchQuery]);
+
+    useEffect(() => {
         scheduleReminders({ expenses, subscriptions, t }).catch((error) => {
             console.error('Error scheduling reminders:', error);
         });
@@ -106,29 +154,37 @@ export default function HomeScreen() {
 
     useEffect(() => {
         loadMonthlySummary();
-    }, [expenses, subscriptions]);
+    }, [expenses, incomes, subscriptions]);
 
     useFocusEffect(
         useCallback(() => {
             runAutoBackupIfDue().catch((error) => {
                 console.error('Error running auto backup:', error);
             });
+            loadExpenses({ silent: true });
         }, [])
     );
 
     const loadExpenses = async ({ silent = false } = {}) => {
         try {
             if (!silent) setLoading(true);
-            const [data, subData] = await Promise.all([
+            const [data, incomeData, subData] = await Promise.all([
                 expenseService.getAll(),
+                incomeService.getAll(),
                 subscriptionService.getAll(),
             ]);
-            setExpenses(data);
-            setSubscriptions(subData);
-            return data;
+            const safeExpenses = Array.isArray(data) ? data : [];
+            const safeIncomes = Array.isArray(incomeData) ? incomeData : [];
+            const safeSubscriptions = Array.isArray(subData) ? subData : [];
+            setExpenses(safeExpenses);
+            setIncomes(safeIncomes);
+            setSubscriptions(safeSubscriptions);
+            return safeExpenses;
         } catch (error) {
             Alert.alert(t('error'), t('couldNotLoad'));
-            console.error(error);
+            setExpenses([]);
+            setIncomes([]);
+            setSubscriptions([]);
         } finally {
             if (!silent) setLoading(false);
             setRefreshing(false);
@@ -140,107 +196,77 @@ export default function HomeScreen() {
         loadExpenses();
     };
 
-    const getInstallmentMeta = (expense) => {
-        const description = expense?.description?.trim();
-        const match = description?.match(/\((\d+)\/(\d+)\)$/);
-        if (!match) return null;
-        const base = description.replace(/\s*\(\d+\/\d+\)$/, '').trim();
-        return {
-            index: parseInt(match[1], 10),
-            total: parseInt(match[2], 10),
-            base,
-        };
-    };
+    const installmentGroupMap = useMemo(() => buildInstallmentGroupMap(expenses), [expenses]);
 
-    const isInstallmentExpense = (expense) => /\((\d+)\/(\d+)\)$/.test(expense?.description || '');
-    const isSubscriptionExpense = (expense) => expense?.description?.includes('(Subscription)');
-
-    const getInstallmentStartKey = (expense, meta) => {
-        if (!expense?.date || !meta) return null;
-        const date = new Date(expense.date);
-        const start = new Date(date);
-        start.setMonth(start.getMonth() - (meta.index - 1));
-        return start.toISOString().split('T')[0];
-    };
-
-    const getInstallmentGroup = (expense, sourceExpenses = expenses) => {
-        const target = getInstallmentMeta(expense);
-        if (!target) return [];
-        const targetStartKey = getInstallmentStartKey(expense, target);
-
-        return sourceExpenses
-            .map((exp) => {
-                const meta = getInstallmentMeta(exp);
-                if (!meta) return null;
-                const startKey = getInstallmentStartKey(exp, meta);
-                return {
-                    ...exp,
-                    _installmentIndex: meta.index,
-                    _installmentTotal: meta.total,
-                    _installmentBase: meta.base,
-                    _installmentStartKey: startKey,
-                };
-            })
-            .filter(Boolean)
-            .filter((exp) => (
-                exp._installmentBase === target.base
-                && exp._installmentTotal === target.total
-                && (exp.currency || 'EUR') === (expense.currency || 'EUR')
-                && exp._installmentStartKey === targetStartKey
-            ))
-            .sort((a, b) => a._installmentIndex - b._installmentIndex);
+    const getInstallmentGroupForExpense = (expense, sourceExpenses = expenses) => {
+        const map = sourceExpenses === expenses ? installmentGroupMap : buildInstallmentGroupMap(sourceExpenses);
+        return getInstallmentGroup(expense, sourceExpenses, map);
     };
 
     const loadMonthlySummary = async () => {
         setSummaryLoading(true);
         try {
+            const rates = await currencyService.getRates();
+            const convertToEUR = (amount, code) => {
+                if (code === 'EUR') return amount;
+                const rate = rates && rates[code];
+                if (!rate) return amount;
+                return amount / rate;
+            };
             const monthExpenses = filterByThisMonth(expenses);
-            const convertedExpenses = await Promise.all(
-                monthExpenses.map(async (exp) => {
-                    const amount = Number(exp.amount) || 0;
-                    const amountEUR = exp.currency && exp.currency !== 'EUR'
-                        ? await currencyService.convertToEUR(amount, exp.currency)
-                        : amount;
-                    return { ...exp, _amountEUR: amountEUR };
-                })
-            );
+            const totalsByCurrency = monthExpenses.reduce((acc, exp) => {
+                const code = exp?.currency || 'EUR';
+                const amount = Number(exp?.amount) || 0;
+                acc[code] = (acc[code] || 0) + amount;
+                return acc;
+            }, {});
+            const convertedExpenses = monthExpenses.map((exp) => {
+                const amount = Number(exp.amount) || 0;
+                const amountEUR = convertToEUR(amount, exp.currency || 'EUR');
+                return { ...exp, _amountEUR: amountEUR };
+            });
+
+            const monthIncomes = filterByThisMonth(incomes);
+            const convertedIncomes = monthIncomes.map((inc) => {
+                const amount = Number(inc.amount) || 0;
+                const amountEUR = convertToEUR(amount, inc.currency || 'EUR');
+                return { ...inc, _amountEUR: amountEUR };
+            });
 
             const spentEUR = convertedExpenses.reduce((sum, exp) => sum + (exp._amountEUR || 0), 0);
+            const incomeEUR = convertedIncomes.reduce((sum, inc) => sum + (inc._amountEUR || 0), 0);
+            const balanceEUR = incomeEUR - spentEUR;
             const installmentsEUR = convertedExpenses
                 .filter((exp) => isInstallmentExpense(exp))
                 .reduce((sum, exp) => sum + (exp._amountEUR || 0), 0);
 
             const activeSubscriptions = (subscriptions || []).filter((sub) => sub.active);
-            const subscriptionsEUR = (await Promise.all(
-                activeSubscriptions.map(async (sub) => {
-                    const amount = Number(sub.amount) || 0;
-                    const amountEUR = sub.currency && sub.currency !== 'EUR'
-                        ? await currencyService.convertToEUR(amount, sub.currency)
-                        : amount;
-                    let monthly = amountEUR;
-                    if (sub.frequency === 'WEEKLY') monthly *= 4.33;
-                    if (sub.frequency === 'YEARLY') monthly /= 12;
-                    return monthly;
-                })
-            )).reduce((sum, val) => sum + (val || 0), 0);
+            const subscriptionsEUR = activeSubscriptions.reduce((sum, sub) => {
+                const amount = Number(sub.amount) || 0;
+                const amountEUR = convertToEUR(amount, sub.currency || 'EUR');
+                let monthly = amountEUR;
+                if (sub.frequency === 'WEEKLY') monthly *= 4.33;
+                if (sub.frequency === 'YEARLY') monthly /= 12;
+                return sum + (monthly || 0);
+            }, 0);
 
             const budgets = await getBudgets();
             const budgetEntries = Object.values(budgets || {});
-            const budgetTotalEUR = (await Promise.all(
-                budgetEntries.map(async (budget) => {
-                    if (!budget?.limit) return 0;
-                    const limit = Number(budget.limit) || 0;
-                    return budget.currency && budget.currency !== 'EUR'
-                        ? await currencyService.convertToEUR(limit, budget.currency)
-                        : limit;
-                })
-            )).reduce((sum, val) => sum + (val || 0), 0);
+            const budgetTotalEUR = budgetEntries.reduce((sum, budget) => {
+                if (!budget?.limit) return sum;
+                const limit = Number(budget.limit) || 0;
+                const limitEUR = convertToEUR(limit, budget.currency || 'EUR');
+                return sum + (limitEUR || 0);
+            }, 0);
 
             setMonthlySummary({
                 budgetTotalEUR: budgetEntries.length > 0 ? budgetTotalEUR : null,
                 budgetRemainingEUR: budgetEntries.length > 0 ? (budgetTotalEUR - spentEUR) : null,
                 forecastEUR: installmentsEUR + subscriptionsEUR,
+                incomeEUR,
                 spentEUR,
+                balanceEUR,
+                totalsByCurrency,
             });
         } catch (error) {
             console.error('Error loading monthly summary:', error);
@@ -294,6 +320,18 @@ export default function HomeScreen() {
         await deleteExpensesByIds([id], t('expenseDeleted'));
     };
 
+    const handleDeleteIncome = async (incomeId) => {
+        if (!incomeId) return;
+        try {
+            await incomeService.delete(incomeId);
+            showSuccess(t('incomeDeleted'));
+        } catch (error) {
+            Alert.alert(t('error'), t('couldNotDelete'));
+        } finally {
+            loadExpenses({ silent: true });
+        }
+    };
+
     const handleDeleteInstallments = async (expense, mode) => {
         const meta = getInstallmentMeta(expense);
         if (!meta) {
@@ -301,7 +339,7 @@ export default function HomeScreen() {
             return;
         }
 
-        const group = getInstallmentGroup(expense);
+        const group = getInstallmentGroupForExpense(expense);
         const ids = mode === 'remaining'
             ? group.filter((item) => item._installmentIndex >= meta.index).map((item) => item.id)
             : [expense.id];
@@ -310,7 +348,7 @@ export default function HomeScreen() {
             ids,
             mode === 'remaining' ? t('installmentsDeleted') : t('installmentDeleted'),
             (updatedExpenses) => {
-                const refreshedGroup = getInstallmentGroup(expense, updatedExpenses);
+                const refreshedGroup = getInstallmentGroupForExpense(expense, updatedExpenses);
                 setInstallmentGroup(refreshedGroup);
                 if (refreshedGroup.length === 0) {
                     setInstallmentsVisible(false);
@@ -330,9 +368,17 @@ export default function HomeScreen() {
         setDeleteExpense(expense);
     };
 
+    const closeIncomeDeleteSheet = () => {
+        setDeleteIncome(null);
+    };
+
+    const openIncomeDeleteConfirm = (income) => {
+        setDeleteIncome(income);
+    };
+
     const openInstallments = (expense) => {
         const meta = getInstallmentMeta(expense);
-        const group = getInstallmentGroup(expense);
+        const group = getInstallmentGroupForExpense(expense);
         setInstallmentTitle(meta?.base || expense.description || '');
         setInstallmentGroup(group);
         setInstallmentsVisible(true);
@@ -350,97 +396,58 @@ export default function HomeScreen() {
 
     const installmentGroups = useMemo(() => {
         const now = new Date();
-        const groups = new Map();
+        return Array.from(installmentGroupMap.groupByKey.values())
+            .map((group) => {
+                const items = [...group.items].sort((a, b) => a._installmentIndex - b._installmentIndex);
+                const nextItem = items.find((item) => new Date(item.date) >= now) || items[items.length - 1];
+                return {
+                    ...group,
+                    items,
+                    nextDate: nextItem?.date,
+                };
+            })
+            .sort((a, b) => new Date(a.nextDate || 0) - new Date(b.nextDate || 0));
+    }, [installmentGroupMap]);
 
-        expenses.forEach((exp) => {
-            const meta = getInstallmentMeta(exp);
-            if (!meta) return;
-            const startKey = getInstallmentStartKey(exp, meta);
-
-            const key = [
-                meta.base,
-                meta.total,
-                exp.currency || 'EUR',
-                startKey || '',
-            ].join('|');
-
-            if (!groups.has(key)) {
-                groups.set(key, {
-                    key,
-                    title: meta.base,
-                    totalCount: meta.total,
-                    startKey,
-                    items: [],
-                });
-            }
-
-            groups.get(key).items.push({
-                ...exp,
-                _installmentIndex: meta.index,
-                _installmentTotal: meta.total,
-                _installmentBase: meta.base,
-                _installmentStartKey: startKey,
-            });
-        });
-
-        return Array.from(groups.values()).map((group) => {
-            group.items.sort((a, b) => a._installmentIndex - b._installmentIndex);
-            const nextItem = group.items.find((item) => new Date(item.date) >= now) || group.items[group.items.length - 1];
-            return {
-                ...group,
-                nextDate: nextItem?.date,
-            };
-        }).sort((a, b) => new Date(a.nextDate || 0) - new Date(b.nextDate || 0));
-    }, [expenses]);
-
-    const handleCategoryPress = (category) => {
+    const handleCategoryPress = useCallback((category) => {
         setSelectedCategory(category);
         setShowCategoryModal(true);
-    };
-
-    const getCategoryExpenses = () => {
-        const filtered = filteredExpenses.filter((exp) => normalizeCategory(exp.category) === selectedCategory);
-        return applySorting(filtered);
-    };
-
-    const applySorting = (expensesToSort) => {
-        switch (sortBy) {
-            case 'oldest':
-                return sortByOldest(expensesToSort);
-            case 'highest':
-                return sortByHighest(expensesToSort);
-            case 'lowest':
-                return sortByLowest(expensesToSort);
-            default: // 'newest'
-                return sortByNewest(expensesToSort);
-        }
-    };
-
-    const getCategoryTotal = (category) => {
-        return filteredExpenses
-            .filter((exp) => normalizeCategory(exp.category) === category)
-            .reduce((sum, exp) => sum + exp.amount, 0);
-    };
+    }, []);
 
     const getDateFilteredExpenses = () => {
+        const safeExpenses = Array.isArray(expenses) ? expenses : [];
         switch (filter) {
             case 'thisMonth':
-                return filterByThisMonth(expenses);
+                return filterByThisMonth(safeExpenses);
             case 'last30Days':
-                return filterByLast30Days(expenses);
+                return filterByLast30Days(safeExpenses);
             default:
-                return filterByAll(expenses);
+                return filterByAll(safeExpenses);
         }
     };
 
-    const getSearchFilteredExpenses = (expensesToFilter) => {
+    const getDateFilteredIncomes = () => {
+        const safeIncomes = Array.isArray(incomes) ? incomes : [];
+        switch (incomePeriodFilter) {
+            case 'thisMonth':
+                return filterByThisMonth(safeIncomes);
+            case 'last30Days':
+                return filterByLast30Days(safeIncomes);
+            default:
+                return filterByAll(safeIncomes);
+        }
+    };
+
+    const getSearchFilteredExpenses = (expensesToFilter = []) => {
+        const safeExpenses = Array.isArray(expensesToFilter) ? expensesToFilter : [];
         if (!debouncedQuery.trim()) {
-            return expensesToFilter;
+            return safeExpenses;
         }
 
         const query = debouncedQuery.toLowerCase().trim();
-        return expensesToFilter.filter(exp => {
-            if (exp.description.toLowerCase().includes(query)) return true;
+        return safeExpenses.filter((exp) => {
+            if (!exp) return false;
+            if (exp.description?.toLowerCase().includes(query)) return true;
 
             const categoryTranslated = t(`categories.${exp.category}`)?.toLowerCase() || '';
             if (categoryTranslated.includes(query)) return true;
@@ -459,24 +466,56 @@ export default function HomeScreen() {
         });
     };
 
-    const applyQuickFilter = (expensesToFilter) => {
+    const getSearchFilteredIncomes = (incomesToFilter = []) => {
+        const safeIncomes = Array.isArray(incomesToFilter) ? incomesToFilter : [];
+        if (!debouncedIncomeQuery.trim()) {
+            return safeIncomes;
+        }
+
+        const query = debouncedIncomeQuery.toLowerCase().trim();
+        return safeIncomes.filter((inc) => {
+            if (!inc) return false;
+            if (inc.description?.toLowerCase().includes(query)) return true;
+
+            const category = normalizeCategory(inc.category);
+            const categoryTranslated = t(`categories.${category}`)?.toLowerCase() || '';
+            if (categoryTranslated.includes(query)) return true;
+            if (inc.category?.toLowerCase().includes(query)) return true;
+
+            const amountStr = inc.amount?.toString() || '';
+            if (amountStr.includes(query)) return true;
+
+            const dateFormatted = formatDate(inc.date, language)?.toLowerCase() || '';
+            if (dateFormatted.includes(query)) return true;
+
+            const incCurrency = (inc.currency || 'EUR').toLowerCase();
+            if (incCurrency.includes(query)) return true;
+
+            return false;
+        });
+    };
+
+    const applyIncomeCategoryFilter = (incomesToFilter = []) => {
+        const safeIncomes = Array.isArray(incomesToFilter) ? incomesToFilter : [];
+        if (incomeCategoryFilter === 'all') return safeIncomes;
+        return safeIncomes.filter((inc) => normalizeCategory(inc.category) === incomeCategoryFilter);
+    };
+
+    const getFilteredIncomes = () => {
+        const dateFiltered = getDateFilteredIncomes();
+        const categoryFiltered = applyIncomeCategoryFilter(dateFiltered);
+        return getSearchFilteredIncomes(categoryFiltered);
+    };
+
+    const applyQuickFilter = (expensesToFilter = []) => {
+        const safeExpenses = Array.isArray(expensesToFilter) ? expensesToFilter : [];
         if (quickFilter === 'installments') {
-            return expensesToFilter.filter((exp) => isInstallmentExpense(exp));
+            return safeExpenses.filter((exp) => isInstallmentExpense(exp));
         }
         if (quickFilter === 'subscriptions') {
-            return expensesToFilter.filter((exp) => isSubscriptionExpense(exp));
+            return safeExpenses.filter((exp) => isSubscriptionExpense(exp));
         }
-        if (quickFilter === 'due7') {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const nextWeek = new Date(today);
-            nextWeek.setDate(nextWeek.getDate() + 7);
-            return expensesToFilter.filter((exp) => {
-                const expDate = new Date(exp.date);
-                return expDate >= today && expDate <= nextWeek;
-            });
-        }
-        return expensesToFilter;
+        return safeExpenses;
     };
 
     const getFilteredExpenses = () => {
@@ -485,8 +524,133 @@ export default function HomeScreen() {
         return applyQuickFilter(searchFiltered);
     };
 
-    const filteredExpenses = getFilteredExpenses();
-    const filteredTotal = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const filteredExpenses = useMemo(
+        () => getFilteredExpenses() || [],
+        [expenses, filter, debouncedQuery, language, quickFilter]
+    );
+
+    const categoryExpenses = useMemo(() => {
+        if (!selectedCategory) return [];
+        const safeExpenses = Array.isArray(filteredExpenses) ? filteredExpenses : [];
+        const selectedKey = normalizeCategory(selectedCategory);
+        const result = safeExpenses.filter((exp) => {
+            if (!exp) return false;
+            return normalizeCategory(exp.category) === selectedKey;
+        });
+        return result;
+    }, [filteredExpenses, selectedCategory]);
+
+    const categorySections = useMemo(() => {
+        if (!selectedCategory || categoryExpenses.length === 0) return [];
+
+        const amountById = new Map(
+            convertedFilteredExpenses.map((exp) => [exp.id, exp._amountEUR || 0])
+        );
+        const groups = new Map();
+
+        categoryExpenses.forEach((exp) => {
+            const dateKey = exp.date ? exp.date.split('T')[0] : 'unknown';
+            if (!groups.has(dateKey)) {
+                groups.set(dateKey, { items: [], totalEUR: 0 });
+            }
+            const group = groups.get(dateKey);
+            group.items.push(exp);
+            group.totalEUR += amountById.get(exp.id) ?? (Number(exp.amount) || 0);
+        });
+
+        const sortItems = (items) => {
+            if (sortBy === 'highest') return sortByHighest(items);
+            if (sortBy === 'lowest') return sortByLowest(items);
+            if (sortBy === 'oldest') return sortByOldest(items);
+            return sortByNewest(items);
+        };
+
+        const dayKeys = Array.from(groups.keys()).sort((a, b) => {
+            if (sortBy === 'oldest') {
+                return new Date(a) - new Date(b);
+            }
+            return new Date(b) - new Date(a);
+        });
+
+        return dayKeys.map((key) => {
+            const group = groups.get(key);
+            return {
+                key,
+                title: key === 'unknown' ? t('date') : formatDate(key, language),
+                totalEUR: group.totalEUR,
+                count: group.items.length,
+                data: sortItems(group.items),
+            };
+        });
+    }, [categoryExpenses, convertedFilteredExpenses, language, selectedCategory, sortBy, t]);
+
+
+    const filteredIncomes = useMemo(
+        () => sortByNewest(getFilteredIncomes()),
+        [incomes, incomePeriodFilter, debouncedIncomeQuery, incomeCategoryFilter, language, t]
+    );
+    const filteredTotal = filteredTotals.expensesEUR;
+    const incomeTotal = filteredTotals.incomeEUR;
+    const incomeCategories = useMemo(() => {
+        const categories = new Set();
+        const dateFiltered = getDateFilteredIncomes();
+
+        dateFiltered.forEach((inc) => {
+            categories.add(normalizeCategory(inc.category));
+        });
+
+        return Array.from(categories).sort((a, b) => {
+            const aLabel = t(`categories.${a}`) || a;
+            const bLabel = t(`categories.${b}`) || b;
+            return aLabel.localeCompare(bLabel);
+        });
+    }, [incomes, incomePeriodFilter, language, t]);
+
+    useEffect(() => {
+        let isActive = true;
+
+        const convertFilteredTotals = async () => {
+            try {
+                const rates = await currencyService.getRates();
+                if (!isActive) return;
+
+                const convertToEUR = (amount, code) => {
+                    if (code === 'EUR') return amount;
+                    const rate = rates && rates[code];
+                    if (!rate) return amount;
+                    return amount / rate;
+                };
+
+                const convertedExpenses = filteredExpenses.map((exp) => {
+                    const amount = Number(exp.amount) || 0;
+                    const amountEUR = convertToEUR(amount, exp.currency || 'EUR');
+                    return { ...exp, _amountEUR: amountEUR };
+                });
+
+                const convertedIncomes = filteredIncomes.map((inc) => {
+                    const amount = Number(inc.amount) || 0;
+                    const amountEUR = convertToEUR(amount, inc.currency || 'EUR');
+                    return { ...inc, _amountEUR: amountEUR };
+                });
+
+                if (!isActive) return;
+
+                setConvertedFilteredExpenses(convertedExpenses);
+                setFilteredTotals({
+                    expensesEUR: convertedExpenses.reduce((sum, exp) => sum + (exp._amountEUR || 0), 0),
+                    incomeEUR: convertedIncomes.reduce((sum, inc) => sum + (inc._amountEUR || 0), 0),
+                });
+            } catch (error) {
+                console.error('Error converting filtered totals:', error);
+            }
+        };
+
+        convertFilteredTotals();
+
+        return () => {
+            isActive = false;
+        };
+    }, [filteredExpenses, filteredIncomes]);
 
     const quickAddItems = useMemo(() => {
         const unique = [];
@@ -506,29 +670,51 @@ export default function HomeScreen() {
         return unique;
     }, [expenses]);
 
-    const filteredGrouped = filteredExpenses.reduce((acc, exp) => {
-        const category = normalizeCategory(exp.category);
-        if (!acc[category]) acc[category] = 0;
-        acc[category] += exp.amount;
-        return acc;
-    }, {});
-
-    const screenWidth = Dimensions.get('window').width;
+    const convertedStatsExpenses = useMemo(
+        () => (Array.isArray(convertedFilteredExpenses) ? convertedFilteredExpenses : [])
+            .map((exp) => ({ ...exp, amount: exp._amountEUR || 0 })),
+        [convertedFilteredExpenses]
+    );
+    const { width: screenWidth } = useWindowDimensions();
     const chartRadius = Math.min((screenWidth - 80) / 2, 130);
     const chartInnerRadius = Math.round(chartRadius * 0.6);
 
-    const filteredChartData = Object.entries(filteredGrouped)
-        .sort(([, a], [, b]) => b - a)
-        .map(([name, value]) => ({
-            value,
-            color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other,
-            onPress: () => handleCategoryPress(name),
-            _categoryName: name,
-        }));
+    const chartMetrics = useMemo(() => {
+        if (convertedStatsExpenses.length === 0) {
+            return { chartData: [], chartTotal: 0 };
+        }
 
-    const highestExpense = getHighestExpense(filteredExpenses);
-    const averagePerDay = getAveragePerDay(filteredExpenses);
-    const topCategory = getTopCategory(filteredExpenses);
+        const grouped = convertedStatsExpenses.reduce((acc, exp) => {
+            const category = normalizeCategory(exp.category);
+            const amount = Number(exp.amount) || 0;
+            if (!acc[category]) acc[category] = 0;
+            acc[category] += amount;
+            return acc;
+        }, {});
+
+        const chartData = Object.entries(grouped)
+            .sort(([, a], [, b]) => b - a)
+            .map(([name, value]) => ({
+                value,
+                color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other,
+                onPress: () => handleCategoryPress(name),
+                _categoryName: name,
+            }));
+
+        const chartTotal = chartData.reduce((sum, item) => sum + (item.value || 0), 0);
+        return { chartData, chartTotal };
+    }, [convertedStatsExpenses, handleCategoryPress]);
+
+    const filteredChartData = chartMetrics.chartData;
+    const chartTotal = chartMetrics.chartTotal;
+
+    const statsSummary = useMemo(() => ({
+        highestExpense: getHighestExpense(convertedStatsExpenses),
+        averagePerDay: getAveragePerDay(convertedStatsExpenses),
+        topCategory: getTopCategory(convertedStatsExpenses),
+    }), [convertedStatsExpenses]);
+
+    const { highestExpense, averagePerDay, topCategory } = statsSummary;
 
     const handleEditExpense = (expense) => {
         setExpenseToEdit(expense);
@@ -536,6 +722,15 @@ export default function HomeScreen() {
         setPrefillExpense(null);
         setShowAddModal(true);
         setShowCategoryModal(false);
+    };
+
+    const handleEditIncome = (income) => {
+        setIncomeToEdit(income);
+        setShowIncomeModal(true);
+    };
+
+    const handleOpenSubscriptions = () => {
+        navigation.navigate('Subscriptions');
     };
 
     const handleQuickAdd = (expense) => {
@@ -557,89 +752,25 @@ export default function HomeScreen() {
         setPrefillExpense(null);
     };
 
-    const styles = createStyles(colors);
+    const handleCloseIncomeModal = () => {
+        setShowIncomeModal(false);
+        setIncomeToEdit(null);
+    };
 
-    const summaryCard = (
-        <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-                <View style={styles.summaryTitleRow}>
-                    <Ionicons name="calendar-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
-                    <Text style={styles.summaryTitle}>{t('monthlySummary')}</Text>
-                </View>
-                {summaryLoading && <ActivityIndicator size="small" color={colors.primary} />}
-            </View>
+    const styles = useMemo(() => createStyles(colors), [colors]);
 
-            <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{t('budgetRemaining')}</Text>
-                {monthlySummary.budgetRemainingEUR !== null ? (
-                    <CurrencyDisplay
-                        amountInEUR={monthlySummary.budgetRemainingEUR}
-                        style={styles.summaryValue}
-                    />
-                ) : (
-                    <Text style={styles.summaryPlaceholder}>--</Text>
-                )}
-            </View>
-
-            <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{t('forecastedSpending')}</Text>
-                <CurrencyDisplay
-                    amountInEUR={monthlySummary.forecastEUR}
-                    style={styles.summaryValue}
-                />
-            </View>
-
-            {monthlySummary.budgetTotalEUR !== null && (
-                <View style={styles.summaryMetaRow}>
-                    <Text style={styles.summaryMetaLabel}>{t('budgetTotal')}</Text>
-                    <CurrencyDisplay
-                        amountInEUR={monthlySummary.budgetTotalEUR}
-                        style={styles.summaryMetaValue}
-                    />
-                </View>
-            )}
-        </View>
-    );
-
-    const quickAddSection = quickAddItems.length > 0 ? (
-        <View style={styles.quickAddSection}>
-            <View style={styles.quickAddHeader}>
-                <Ionicons name="flash-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
-                <View style={styles.quickAddHeaderText}>
-                    <Text style={styles.quickAddTitle}>{t('quickAdd')}</Text>
-                    <Text style={styles.quickAddHint}>{t('quickAddHint')}</Text>
-                </View>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.quickAddRow}>
-                    {quickAddItems.map((item) => {
-                        const symbol = getCurrencyByCode(item.currency || 'EUR').symbol;
-                        return (
-                            <TouchableOpacity
-                                key={item.id}
-                                style={styles.quickAddChip}
-                                onPress={() => handleQuickAdd(item)}
-                                activeOpacity={0.8}
-                            >
-                                <Text style={styles.quickAddChipTitle} numberOfLines={1}>
-                                    {item.description}
-                                </Text>
-                                <Text style={styles.quickAddChipAmount}>
-                                    {symbol}{Number(item.amount).toFixed(2)}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-            </ScrollView>
-        </View>
-    ) : null;
+    const totalsByCurrencyLabel = useMemo(() => {
+        const entries = Object.entries(monthlySummary.totalsByCurrency || {});
+        if (entries.length === 0) return '';
+        return entries
+            .map(([code, amount]) => `${getCurrencyByCode(code).symbol}${amount.toFixed(2)} ${code}`)
+            .join(' · ');
+    }, [monthlySummary.totalsByCurrency]);
 
     const quickFilters = [
         { key: 'all', label: t('all') },
         { key: 'installments', label: t('filterInstallments') },
         { key: 'subscriptions', label: t('filterSubscriptions') },
-        { key: 'due7', label: t('filterDue7Days') },
     ];
 
     const quickFiltersRow = (
@@ -669,6 +800,46 @@ export default function HomeScreen() {
         </ScrollView>
     );
 
+    const showForecastAtTop = quickFilter === 'installments' || quickFilter === 'subscriptions';
+
+    const quickFilterMeta = {
+        all: { label: t('all'), icon: 'layers-outline', color: colors.textLight },
+        installments: { label: t('filterInstallments'), icon: 'card-outline', color: colors.warning },
+        subscriptions: { label: t('filterSubscriptions'), icon: 'repeat-outline', color: colors.primary },
+    };
+    const activeFilterMeta = quickFilterMeta[quickFilter] || quickFilterMeta.all;
+    const showFilterSummary = quickFilter !== 'all';
+
+    const filterSummaryCard = showFilterSummary ? (
+        <View style={styles.filterSummaryCard}>
+            <View style={styles.filterSummaryLeft}>
+                <View style={[styles.filterSummaryIcon, { backgroundColor: activeFilterMeta.color + '20' }]}>
+                    <Ionicons name={activeFilterMeta.icon} size={16} color={activeFilterMeta.color} />
+                </View>
+                <View>
+                    <Text style={styles.filterSummaryTitle}>{activeFilterMeta.label}</Text>
+                    <Text style={styles.filterSummarySubtitle}>{t(filter)}</Text>
+                </View>
+            </View>
+            <View style={styles.filterSummaryRight}>
+                <CurrencyDisplay amountInEUR={filteredTotal} style={styles.filterSummaryTotal} />
+                <Text style={styles.filterSummaryCount}>
+                    {filteredExpenses.length} {t('expenses').toLowerCase()}
+                </Text>
+            </View>
+        </View>
+    ) : null;
+
+    const forecastSection = (
+        <ForecastSection
+            expenses={expenses}
+            subscriptions={subscriptions}
+            installmentGroups={installmentGroups}
+            onOpenInstallments={() => setInstallmentGroupsVisible(true)}
+            onPressSubscriptions={handleOpenSubscriptions}
+        />
+    );
+
     if (loading) {
         return (
             <View style={styles.centerContainer}>
@@ -680,34 +851,28 @@ export default function HomeScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
             <LinearGradient
                 colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.header}
             >
-                <View style={styles.headerTitleRow}>
-                    <Ionicons name="wallet-outline" size={24} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
-                    <Text style={styles.headerTitle}>{t('appName')}</Text>
-                </View>
-
-                <View style={styles.headerStats}>
-                    <View>
-                        <Text style={styles.headerLabel}>{t('total')}</Text>
-                        <CurrencyDisplay
-                            amountInEUR={filteredTotal}
-                            style={styles.headerAmount}
-                        />
+                <View style={styles.headerTopRow}>
+                    <View style={styles.headerTitleRow}>
+                        <Ionicons name="wallet-outline" size={24} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.headerTitle}>{t('appName')}</Text>
                     </View>
-                    <View style={styles.divider} />
-                    <View>
-                        <Text style={styles.headerLabel}>{t('expenses')}</Text>
-                        <Text style={styles.headerCount}>{filteredExpenses.length}</Text>
-                    </View>
+                    <TouchableOpacity
+                        style={styles.headerActionButton}
+                        onPress={() => navigation.navigate('Settings', { returnTo: returnToScreen })}
+                        activeOpacity={0.8}
+                        accessibilityLabel={t('settings')}
+                        accessibilityRole="button"
+                    >
+                        <Ionicons name="person-outline" size={18} color={colors.textWhite} />
+                    </TouchableOpacity>
                 </View>
             </LinearGradient>
-            {/* Campo de Busca */}
             <View style={styles.searchContainer}>
                 <Ionicons name="search-outline" size={20} color={colors.textLight} style={{ marginRight: spacing.sm }} />
                 <TextInput
@@ -728,14 +893,49 @@ export default function HomeScreen() {
                 )}
             </View>
 
-            {/* Conte?do */}
+            <View style={styles.stickySummary}>
+                <View style={styles.stickySummaryItem}>
+                    <Text style={styles.stickyLabel}>{t('totalExpenses')}</Text>
+                    <CurrencyDisplay amountInEUR={filteredTotal} style={styles.stickyAmount} />
+                </View>
+                <View style={styles.stickyDivider} />
+                <View style={styles.stickySummaryItem}>
+                    <Text style={styles.stickyLabel}>{t('totalIncome')}</Text>
+                    <CurrencyDisplay amountInEUR={incomeTotal} style={styles.stickyAmount} />
+                </View>
+            </View>
+
+
             <ScrollView
                 style={styles.content}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
                 {quickFiltersRow}
-                {summaryCard}
-                {quickAddSection}
+                <HomeSummaryCard
+                    monthlySummary={monthlySummary}
+                    summaryLoading={summaryLoading}
+                    totalsByCurrencyLabel={totalsByCurrencyLabel}
+                />
+                {filterSummaryCard}
+                {showForecastAtTop && forecastSection}
+                <HomeIncomeSection
+                    filteredIncomes={filteredIncomes}
+                    incomeTotal={incomeTotal}
+                    incomePeriodFilter={incomePeriodFilter}
+                    setIncomePeriodFilter={setIncomePeriodFilter}
+                    incomeSearchQuery={incomeSearchQuery}
+                    setIncomeSearchQuery={setIncomeSearchQuery}
+                    incomeCategoryFilter={incomeCategoryFilter}
+                    setIncomeCategoryFilter={setIncomeCategoryFilter}
+                    incomeCategories={incomeCategories}
+                    showAllIncomes={showAllIncomes}
+                    setShowAllIncomes={setShowAllIncomes}
+                    onDetailIncome={setDetailIncome}
+                />
+                <HomeQuickAdd
+                    quickAddItems={quickAddItems}
+                    onQuickAdd={handleQuickAdd}
+                />
                 {expenses.length === 0 ? (
                     <View style={styles.emptyState}>
                         <Ionicons name="mail-open-outline" size={64} color={colors.textLight} />
@@ -762,43 +962,9 @@ export default function HomeScreen() {
                             </Text>
                         </View>
 
-                        {/* Filtros - mesmo quando vazio */}
-                        <View style={styles.filtersContainerMain}>
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'thisMonth' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('thisMonth')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'thisMonth' && styles.filterButtonMainTextActive]}>
-                                    {t('thisMonth')}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'last30Days' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('last30Days')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'last30Days' && styles.filterButtonMainTextActive]}>
-                                    {t('last30Days')}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'all' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('all')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'all' && styles.filterButtonMainTextActive]}>
-                                    {t('all')}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-
                     </View>
                 ) : (
                     <View style={styles.chartSection}>
-                        {/* Gráfico */}
                         {filteredChartData.length > 0 && (
                             <FadeIn delay={100}>
                                 <View style={styles.chartContainer}>
@@ -816,7 +982,7 @@ export default function HomeScreen() {
                                         centerLabelComponent={() => (
                                             <View style={styles.donutCenter}>
                                                 <CurrencyDisplay
-                                                    amountInEUR={filteredTotal}
+                                                    amountInEUR={chartTotal}
                                                     style={styles.donutTotal}
                                                 />
                                                 <Text style={styles.donutLabel}>{t('total')}</Text>
@@ -828,7 +994,6 @@ export default function HomeScreen() {
                                     />
                                 </View>
 
-                                {/* Legendas dentro do card do donut */}
                                 <View style={styles.legendsDivider} />
                                 <View style={styles.legendsInline}>
                                     <View style={styles.legendsTitleRow}>
@@ -840,7 +1005,7 @@ export default function HomeScreen() {
                                             key={index}
                                             category={item._categoryName}
                                             amount={item.value}
-                                            total={filteredTotal}
+                                            total={chartTotal}
                                             onPress={() => handleCategoryPress(item._categoryName)}
                                         />
                                     ))}
@@ -848,41 +1013,6 @@ export default function HomeScreen() {
                             </View>
                             </FadeIn>
                         )}
-
-                        {/* Filtros */}
-                        <View style={styles.filtersContainerMain}>
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'thisMonth' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('thisMonth')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'thisMonth' && styles.filterButtonMainTextActive]}>
-                                    {t('thisMonth')}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'last30Days' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('last30Days')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'last30Days' && styles.filterButtonMainTextActive]}>
-                                    {t('last30Days')}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.filterButtonMain, filter === 'all' && styles.filterButtonMainActive]}
-                                onPress={() => setFilter('all')}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.filterButtonMainText, filter === 'all' && styles.filterButtonMainTextActive]}>
-                                    {t('all')}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Estatísticas */}
                         <FadeIn delay={300}>
                             <View style={styles.statsContainer}>
                             <View style={styles.statsTitleRow}>
@@ -891,16 +1021,14 @@ export default function HomeScreen() {
                             </View>
 
                             <View style={styles.statsRow}>
-                                {/* Maior gasto */}
                                 {highestExpense && (
                                     <View style={styles.statCompact}>
-                                        <View style={[styles.statIconCircle, { backgroundColor: colors.warning + '20' }]}>
+                                        <View style={[styles.statIconCircle, { backgroundColor: colors.warningBg }]}>
                                             <Ionicons name="arrow-up-outline" size={16} color={colors.warning} />
                                         </View>
                                         <Text style={styles.statLabel}>{t('highestExpense')}</Text>
                                         <CurrencyDisplay
                                             amountInEUR={highestExpense.amount}
-                                            originalCurrency={highestExpense.currency}
                                             style={styles.statValue}
                                         />
                                         <Text style={styles.statSubtext} numberOfLines={1}>
@@ -909,9 +1037,8 @@ export default function HomeScreen() {
                                     </View>
                                 )}
 
-                                {/* Média por dia */}
                                 <View style={styles.statCompact}>
-                                    <View style={[styles.statIconCircle, { backgroundColor: colors.primary + '20' }]}>
+                                    <View style={[styles.statIconCircle, { backgroundColor: colors.primaryBg }]}>
                                         <Ionicons name="calendar-outline" size={16} color={colors.primary} />
                                     </View>
                                     <Text style={styles.statLabel}>{t('averagePerDay')}</Text>
@@ -925,10 +1052,9 @@ export default function HomeScreen() {
                                 </View>
                             </View>
 
-                            {/* Categoria top - full width */}
                             {topCategory && (
                                 <View style={styles.statTopCategory}>
-                                    <View style={[styles.statIconCircle, { backgroundColor: colors.success + '20' }]}>
+                                    <View style={[styles.statIconCircle, { backgroundColor: colors.successBg }]}>
                                         <Ionicons name="trophy-outline" size={16} color={colors.success} />
                                     </View>
                                     <View style={styles.statTopCategoryInfo}>
@@ -945,17 +1071,12 @@ export default function HomeScreen() {
                             </View>
                         </FadeIn>
 
-                        {/* Previsão de Gastos */}
-                        <FadeIn delay={400}>
-                            <ForecastSection
-                                expenses={expenses}
-                                subscriptions={subscriptions}
-                                installmentGroups={installmentGroups}
-                                onOpenInstallments={() => setInstallmentGroupsVisible(true)}
-                            />
-                        </FadeIn>
+                        {!showForecastAtTop && (
+                            <FadeIn delay={400}>
+                                {forecastSection}
+                            </FadeIn>
+                        )}
 
-                        {/* Gráfico de Evolução Mensal */}
                         <FadeIn delay={600}>
                             <MonthlyChart expenses={expenses} />
                         </FadeIn>
@@ -964,7 +1085,6 @@ export default function HomeScreen() {
                 )}
             </ScrollView>
 
-            {/* Modal de Categoria */}
             <Modal
                 visible={showCategoryModal}
                 animationType="slide"
@@ -986,8 +1106,7 @@ export default function HomeScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Menu de Ordenação */}
-                        {getCategoryExpenses().length > 0 && (
+                        {categoryExpenses.length > 0 && (
                             <View style={styles.sortContainer}>
                                 <Text style={styles.sortLabel}>{t('sortBy')}:</Text>
                                 <TouchableOpacity
@@ -1000,7 +1119,6 @@ export default function HomeScreen() {
                                     </Text>
                                 </TouchableOpacity>
 
-                                {/* Dropdown de opções */}
                                 {showSortMenu && (
                                     <View style={styles.sortDropdown}>
                                         {['newest', 'oldest', 'highest', 'lowest'].map((option) => (
@@ -1028,14 +1146,28 @@ export default function HomeScreen() {
                             </View>
                         )}
 
-                        {getCategoryExpenses().length === 0 ? (
+                    {categoryExpenses.length === 0 ? (
                             <View style={styles.emptyCategory}>
                                 <Text style={styles.emptyCategoryText}>{t('noExpenses')}</Text>
                             </View>
                         ) : (
-                            <SwipeListView
-                                data={getCategoryExpenses()}
+                            <SectionList
+                                sections={categorySections}
                                 keyExtractor={(item) => item.id.toString()}
+                                renderSectionHeader={({ section }) => (
+                                    <View style={styles.categoryDayHeader}>
+                                        <View>
+                                            <Text style={styles.categoryDayTitle}>{section.title}</Text>
+                                            <Text style={styles.categoryDaySubtitle}>
+                                                {section.count} {t('expenses').toLowerCase()}
+                                            </Text>
+                                        </View>
+                                        <CurrencyDisplay
+                                            amountInEUR={section.totalEUR}
+                                            style={styles.categoryDayTotal}
+                                        />
+                                    </View>
+                                )}
                                 renderItem={({ item }) => (
                                     <TouchableOpacity
                                         activeOpacity={1}
@@ -1048,39 +1180,14 @@ export default function HomeScreen() {
                                         <ExpenseCard expense={item} />
                                     </TouchableOpacity>
                                 )}
-                                renderHiddenItem={({ item }) => (
-                                    <View style={styles.swipeHiddenRow}>
-                                        <TouchableOpacity
-                                            style={styles.swipeEditButton}
-                                            onPress={() => handleEditExpense(item)}
-                                        >
-                                            <Ionicons name="create-outline" size={24} color="#FFF" />
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.swipeDeleteButton}
-                                            onPress={() => openDeleteConfirm(item)}
-                                        >
-                                            <Ionicons name="trash-outline" size={24} color="#FFF" />
-                                        </TouchableOpacity>
-                                    </View>
-                                )}
-                                leftOpenValue={70}
-                                rightOpenValue={-70}
-                                disableLeftSwipe={false}
-                                disableRightSwipe={false}
-                                directionalDistanceChangeThreshold={10}
-                                swipeToOpenPercent={20}
-                                closeOnRowPress={true}
-                                closeOnRowBeginSwipe={true}
-                                friction={50}
-                                tension={40}
+                                contentContainerStyle={styles.categoryListContent}
+                                stickySectionHeadersEnabled={false}
                             />
                         )}
                     </View>
                 </View>
             </Modal>
 
-            {/* Modal de Detalhes */}
             <ExpenseDetailModal
                 visible={!!detailExpense}
                 expense={detailExpense}
@@ -1106,7 +1213,6 @@ export default function HomeScreen() {
                 }}
             />
 
-            {/* Modal de Adicionar/Editar */}
             <AddExpenseModal
                 visible={showAddModal}
                 onClose={handleCloseModal}
@@ -1114,6 +1220,13 @@ export default function HomeScreen() {
                 expenseToEdit={expenseToEdit}
                 installmentGroupToEdit={installmentGroupToEdit}
                 prefillExpense={prefillExpense}
+            />
+
+            <AddIncomeModal
+                visible={showIncomeModal}
+                onClose={handleCloseIncomeModal}
+                onSuccess={loadExpenses}
+                incomeToEdit={incomeToEdit}
             />
 
             <InstallmentGroupsModal
@@ -1125,6 +1238,24 @@ export default function HomeScreen() {
                     setInstallmentTitle(group.title);
                     setInstallmentGroup(group.items);
                     setInstallmentsVisible(true);
+                }}
+            />
+
+            <IncomeDetailModal
+                visible={!!detailIncome}
+                income={detailIncome}
+                onClose={() => setDetailIncome(null)}
+                onEdit={(income) => {
+                    setDetailIncome(null);
+                    setTimeout(() => {
+                        handleEditIncome(income);
+                    }, 300);
+                }}
+                onDelete={(income) => {
+                    setDetailIncome(null);
+                    setTimeout(() => {
+                        openIncomeDeleteConfirm(income);
+                    }, 300);
                 }}
             />
 
@@ -1164,6 +1295,20 @@ export default function HomeScreen() {
                 }}
             />
 
+            <DeleteConfirmSheet
+                visible={!!deleteIncome}
+                onClose={closeIncomeDeleteSheet}
+                onDelete={() => {
+                    const target = deleteIncome;
+                    closeIncomeDeleteSheet();
+                    if (target) {
+                        handleDeleteIncome(target.id);
+                    }
+                }}
+                title={t('deleteIncome')}
+                message={t('deleteIncomeConfirm')}
+            />
+
             {deleting && (
                 <View style={styles.deletingToast} pointerEvents="none">
                     <ActivityIndicator size="small" color={colors.primary} />
@@ -1171,626 +1316,6 @@ export default function HomeScreen() {
                 </View>
             )}
 
-            {/* FAB */}
-            <TouchableOpacity
-                style={styles.fabWrapper}
-                onPress={() => {
-                    setInstallmentGroupToEdit(null);
-                    setPrefillExpense(null);
-                    setShowAddModal(true);
-                }}
-                activeOpacity={0.85}
-            >
-                <LinearGradient
-                    colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.fab}
-                >
-                    <Ionicons name="add" size={32} color={colors.textWhite} />
-                </LinearGradient>
-            </TouchableOpacity>
         </View>
     );
 }
-
-const createStyles = (colors) => StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    centerContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.background,
-        gap: spacing.md,
-    },
-    header: {
-        paddingTop: sizes.headerHeight,
-        paddingBottom: spacing.xl,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: borderRadius.xxl,
-        borderBottomRightRadius: borderRadius.xxl,
-    },
-    headerTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.lg,
-    },
-    headerTitle: {
-        fontSize: fontSize.xxxl,
-        fontFamily: fontFamily.bold,
-        color: colors.textWhite,
-    },
-    headerStats: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-around',
-        backgroundColor: 'rgba(255, 255, 255, 0.12)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.18)',
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-    },
-    headerLabel: {
-        fontSize: fontSize.xs,
-        fontFamily: fontFamily.medium,
-        color: '#E0E7FF',
-        marginBottom: spacing.xs,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
-    headerAmount: {
-        fontSize: fontSize.huge,
-        fontFamily: fontFamily.bold,
-        color: colors.textWhite,
-    },
-    headerCount: {
-        fontSize: fontSize.huge,
-        fontFamily: fontFamily.bold,
-        color: colors.textWhite,
-    },
-    divider: {
-        width: 1,
-        height: 40,
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    },
-    content: {
-        flex: 1,
-    },
-    loadingText: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.medium,
-        color: colors.textLight,
-    },
-    deletingToast: {
-        position: 'absolute',
-        bottom: spacing.xxl + sizes.fabSize + spacing.sm,
-        alignSelf: 'center',
-        backgroundColor: colors.surface,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        borderRadius: borderRadius.full,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.sm,
-        ...shadows.small,
-    },
-    deletingText: {
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.medium,
-        color: colors.text,
-    },
-    emptyState: {
-        alignItems: 'center',
-        marginTop: 80,
-        paddingHorizontal: spacing.xl,
-    },
-    emptyText: {
-        fontSize: fontSize.xl + 2,
-        fontFamily: fontFamily.semibold,
-        color: colors.text,
-        marginBottom: spacing.sm,
-        marginTop: spacing.lg,
-    },
-    emptySubtext: {
-        fontSize: fontSize.md,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-        textAlign: 'center',
-    },
-    chartSection: {
-        paddingBottom: 100,
-    },
-    chartContainer: {
-        backgroundColor: colors.surface,
-        margin: spacing.xl,
-        marginBottom: spacing.md,
-        padding: spacing.xl,
-        borderRadius: borderRadius.xl,
-        ...shadows.medium,
-        alignItems: 'center',
-    },
-    chartTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        marginBottom: spacing.lg,
-    },
-    chartTitle: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    pieWrapper: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: spacing.md,
-    },
-    donutCenter: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    donutTotal: {
-        fontSize: fontSize.xl,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    donutLabel: {
-        fontSize: fontSize.xs,
-        fontFamily: fontFamily.medium,
-        color: colors.textLight,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginTop: 2,
-    },
-    legendsDivider: {
-        height: 1,
-        backgroundColor: colors.border,
-        marginTop: spacing.lg,
-        marginBottom: spacing.md,
-    },
-    legendsInline: {
-        width: '100%',
-    },
-    legendsTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: spacing.lg,
-    },
-    legendsTitle: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: colors.overlay,
-        justifyContent: 'flex-end',
-    },
-    overlayTouchArea: {
-        flex: 1,
-    },
-    handleBar: {
-        width: 40,
-        height: 4,
-        backgroundColor: colors.border,
-        borderRadius: 2,
-        alignSelf: 'center',
-        marginTop: spacing.md,
-        marginBottom: spacing.xs,
-    },
-    categoryModal: {
-        backgroundColor: colors.surface,
-        borderTopLeftRadius: borderRadius.xxxl,
-        borderTopRightRadius: borderRadius.xxxl,
-        maxHeight: '80%',
-        paddingBottom: spacing.xl,
-    },
-    categoryModalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: spacing.xl,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    categoryModalTitle: {
-        fontSize: fontSize.xxxl,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    closeButton: {
-        fontSize: fontSize.huge,
-        color: colors.textLight,
-        fontWeight: fontWeight.light,
-    },
-    emptyCategory: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    emptyCategoryText: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-    },
-    swipeRow: {
-        backgroundColor: colors.surface,
-    },
-    swipeHiddenRow: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginVertical: spacing.md - 2,
-    },
-    swipeEditButton: {
-        backgroundColor: colors.primary,
-        width: 70,
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderTopLeftRadius: borderRadius.md,
-        borderBottomLeftRadius: borderRadius.md,
-    },
-    swipeDeleteButton: {
-        backgroundColor: colors.error,
-        width: 70,
-        height: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderTopRightRadius: borderRadius.md,
-        borderBottomRightRadius: borderRadius.md,
-    },
-    fabWrapper: {
-        position: 'absolute',
-        bottom: spacing.xxl,
-        right: spacing.xxl,
-        ...shadows.colored,
-    },
-    fab: {
-        width: sizes.fabSize,
-        height: sizes.fabSize,
-        borderRadius: borderRadius.full,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    filtersContainerMain: {
-        flexDirection: 'row',
-        marginHorizontal: spacing.xl,
-        marginTop: spacing.md,
-        marginBottom: spacing.md,
-        gap: spacing.sm,
-    },
-    filterButtonMain: {
-        flex: 1,
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.sm,
-        borderRadius: borderRadius.md,
-        backgroundColor: colors.background,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    filterButtonMainActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-    },
-    filterButtonMainText: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.semibold,
-        color: colors.textLight,
-    },
-    filterButtonMainTextActive: {
-        color: colors.textWhite,
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        marginHorizontal: spacing.xl,
-        marginTop: -spacing.xxl,
-        marginBottom: spacing.md,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        borderRadius: borderRadius.lg,
-        ...shadows.medium,
-    },
-    summaryCard: {
-        backgroundColor: colors.surface,
-        marginHorizontal: spacing.xl,
-        marginBottom: spacing.md,
-        padding: spacing.lg,
-        borderRadius: borderRadius.xl,
-        ...shadows.small,
-    },
-    summaryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.md,
-    },
-    summaryTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    summaryTitle: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: spacing.xs,
-    },
-    summaryLabel: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.medium,
-        color: colors.textLight,
-    },
-    summaryValue: {
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    summaryPlaceholder: {
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.semibold,
-        color: colors.textLight,
-    },
-    summaryMetaRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: spacing.sm,
-        paddingTop: spacing.sm,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-    },
-    summaryMetaLabel: {
-        fontSize: fontSize.xs,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-    },
-    summaryMetaValue: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.semibold,
-        color: colors.text,
-    },
-    quickFiltersRow: {
-        flexDirection: 'row',
-        gap: spacing.sm,
-        paddingHorizontal: spacing.xl,
-        paddingTop: spacing.md,
-        paddingBottom: spacing.md,
-    },
-    quickFilterChip: {
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.lg,
-        borderRadius: borderRadius.full,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    quickFilterChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-    },
-    quickFilterText: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.semibold,
-        color: colors.text,
-    },
-    quickFilterTextActive: {
-        color: colors.textWhite,
-    },
-    quickAddSection: {
-        marginHorizontal: spacing.xl,
-        marginBottom: spacing.md,
-        padding: spacing.lg,
-        borderRadius: borderRadius.xl,
-        backgroundColor: colors.surface,
-        ...shadows.small,
-    },
-    quickAddHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.md,
-    },
-    quickAddHeaderText: {
-        flex: 1,
-    },
-    quickAddTitle: {
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    quickAddHint: {
-        fontSize: fontSize.xs,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-        marginTop: 2,
-    },
-    quickAddRow: {
-        flexDirection: 'row',
-        gap: spacing.sm,
-    },
-    quickAddChip: {
-        backgroundColor: colors.background,
-        borderRadius: borderRadius.lg,
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.lg,
-        minWidth: 140,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    quickAddChipTitle: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.semibold,
-        color: colors.text,
-        marginBottom: spacing.xs,
-    },
-    quickAddChipAmount: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.bold,
-        color: colors.primary,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.regular,
-        color: colors.text,
-        padding: 0,
-    },
-    clearButton: {
-        padding: spacing.xs,
-        marginLeft: spacing.sm,
-    },
-    sortContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: spacing.xl,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    sortLabel: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.medium,
-        color: colors.textLight,
-    },
-    sortButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.background,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-        borderRadius: borderRadius.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    sortButtonText: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.semibold,
-        color: colors.text,
-    },
-    sortDropdown: {
-        position: 'absolute',
-        top: 50,
-        right: spacing.xl,
-        backgroundColor: colors.surface,
-        borderRadius: borderRadius.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-        ...shadows.large,
-        zIndex: 1000,
-        minWidth: 150,
-    },
-    sortOption: {
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.borderLight,
-    },
-    sortOptionActive: {
-        backgroundColor: colors.primaryBg,
-    },
-    sortOptionText: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.medium,
-        color: colors.text,
-    },
-    sortOptionTextActive: {
-        color: colors.primary,
-        fontFamily: fontFamily.bold,
-    },
-    statsContainer: {
-        backgroundColor: colors.surface,
-        margin: spacing.xl,
-        marginBottom: spacing.md,
-        padding: spacing.lg,
-        borderRadius: borderRadius.xl,
-        ...shadows.small,
-    },
-    statsTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: spacing.lg,
-    },
-    statsTitle: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    statsRow: {
-        flexDirection: 'row',
-        gap: spacing.md,
-        marginBottom: spacing.md,
-    },
-    statCompact: {
-        flex: 1,
-        backgroundColor: colors.background,
-        padding: spacing.lg,
-        borderRadius: borderRadius.md,
-        alignItems: 'flex-start',
-    },
-    statIconCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: borderRadius.full,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: spacing.sm,
-    },
-    statLabel: {
-        fontSize: fontSize.xs,
-        fontFamily: fontFamily.medium,
-        color: colors.textLight,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: spacing.xs,
-    },
-    statValue: {
-        fontSize: fontSize.lg,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-        marginBottom: 2,
-    },
-    statSubtext: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.regular,
-        color: colors.textLight,
-    },
-    statTopCategory: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.background,
-        padding: spacing.lg,
-        borderRadius: borderRadius.md,
-    },
-    statTopCategoryInfo: {
-        flex: 1,
-        marginLeft: spacing.md,
-    },
-    statTopCategoryName: {
-        fontSize: fontSize.base,
-        fontFamily: fontFamily.bold,
-        color: colors.text,
-    },
-    statTopCategoryBadge: {
-        backgroundColor: colors.success + '20',
-        paddingVertical: spacing.xs,
-        paddingHorizontal: spacing.md,
-        borderRadius: borderRadius.full,
-    },
-    statTopCategoryBadgeText: {
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.bold,
-        color: colors.success,
-    },
-});

@@ -1,50 +1,55 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0F766E;
+  --color-primary-light: #14B8A6;
+  --color-primary-dark: #0A5C56;
+  --color-accent: #F97316;
+  --color-accent-light: #FB923C;
+  --color-canvas: #F5FAF8;
+  --color-surface: #FFFFFF;
+  --color-ink: #132A2B;
+  --color-muted: #5C6F70;
+  --color-border: rgba(15, 23, 42, 0.10);
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-cat-food: #F97316;
+  --color-cat-transport: #3B82F6;
+  --color-cat-housing: #8B5CF6;
+  --color-cat-entertainment: #EC4899;
+  --color-cat-health: #10B981;
+  --color-cat-shopping: #F43F5E;
+  --color-cat-education: #6366F1;
+  --color-cat-utilities: #14B8A6;
+  --color-cat-other: #6B7280;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background: #f5f7fa;
-  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
+@layer components {
+  .gradient-bg {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 50%, var(--color-accent) 100%);
   }
-  to {
-    opacity: 1;
-  }
-}
 
-@keyframes slide-up {
-  from {
-    transform: translateY(100%);
+  .glass-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
   }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes pulse-scale {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}
-
-.animate-pulse-scale {
-  animation: pulse-scale 2s ease-in-out infinite;
 }

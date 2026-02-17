@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 
 export default function FadeIn({ children, delay = 0, duration = 500, slideUp = true }) {

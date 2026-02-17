@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
+import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import CurrencyDisplay from './CurrencyDisplay';
 
 export default function InstallmentsModal({
@@ -171,7 +171,7 @@ export default function InstallmentsModal({
                         </TouchableWithoutFeedback>
                         <View style={styles.deleteSheet}>
                             <View style={styles.deleteHeader}>
-                                <View style={[styles.deleteIconWrap, { backgroundColor: colors.error + '15' }]}>
+                                <View style={[styles.deleteIconWrap, { backgroundColor: colors.errorBg }]}>
                                     <Ionicons name="trash-outline" size={22} color={colors.error} />
                                 </View>
                                 <Text style={styles.deleteTitle}>{t('deleteInstallmentTitle')}</Text>
@@ -210,7 +210,7 @@ const createStyles = (colors) =>
     StyleSheet.create({
         overlay: {
             flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.45)',
+            backgroundColor: colors.overlay,
             justifyContent: 'flex-end',
         },
         overlayTouch: {
@@ -267,7 +267,7 @@ const createStyles = (colors) =>
         closeButton: {
             fontSize: fontSize.huge,
             color: colors.textLight,
-            fontWeight: '300',
+            fontWeight: fontWeight.light,
         },
         subtitle: {
             fontSize: fontSize.base,
@@ -340,7 +340,7 @@ const createStyles = (colors) =>
             width: 32,
             height: 32,
             borderRadius: borderRadius.full,
-            backgroundColor: colors.error + '1A',
+            backgroundColor: colors.errorBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -356,7 +356,7 @@ const createStyles = (colors) =>
         },
         deleteOverlay: {
             ...StyleSheet.absoluteFillObject,
-            backgroundColor: 'rgba(0,0,0,0.35)',
+            backgroundColor: colors.overlayLight,
             justifyContent: 'flex-end',
         },
         deleteOverlayTouch: {

@@ -1,4 +1,4 @@
-import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+﻿import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
@@ -48,7 +48,7 @@ export default function ConfirmSheet({
                     </View>
 
                     <View style={styles.actions}>
-                        {primaryLabel && (
+                        {!!primaryLabel && (
                             <TouchableOpacity
                                 style={[styles.primaryButton, { backgroundColor: primaryBackground }]}
                                 onPress={onPrimary}
@@ -58,7 +58,7 @@ export default function ConfirmSheet({
                             </TouchableOpacity>
                         )}
 
-                        {secondaryLabel && (
+                        {!!secondaryLabel && (
                             <TouchableOpacity
                                 style={[styles.secondaryButton, { borderColor: secondaryBorder }]}
                                 onPress={onSecondary}
@@ -70,7 +70,7 @@ export default function ConfirmSheet({
                             </TouchableOpacity>
                         )}
 
-                        {tertiaryLabel && (
+                        {!!tertiaryLabel && (
                             <TouchableOpacity onPress={onTertiary} activeOpacity={0.85}>
                                 <Text style={styles.tertiaryText}>{tertiaryLabel}</Text>
                             </TouchableOpacity>
@@ -86,7 +86,7 @@ const createStyles = (colors) =>
     StyleSheet.create({
         overlay: {
             flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backgroundColor: colors.overlay,
             justifyContent: 'flex-end',
         },
         overlayTouch: {

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { getCategoryIcon } from '../constants/categories';
 
 export default function CategoryIcon({ category, size = 24, color = '#6366F1' }) {

@@ -47,11 +47,16 @@ build/
 ### VS Code ###
 .vscode/
 
-### macOS ###
+### Claude Code ###
+.claude/
+
+### macOS / Windows ###
 .DS_Store
 Thumbs.db
+NUL
 
 ### Logs ###
 *.log
 
 HELP.md
+APP_TEST_PLAN.md

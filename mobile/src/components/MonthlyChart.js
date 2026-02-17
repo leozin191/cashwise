@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback } from 'react-native';
+﻿import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,12 +7,12 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { getCurrencyByCode } from '../constants/currencies';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
 import { groupByMonth, getLastNMonths } from '../utils/helpers';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import currencyService from '../services/currency';
 
 const screenWidth = Dimensions.get('window').width;
 
-export default function MonthlyChart({ expenses }) {
+export default function MonthlyChart({ expenses, onMonthPress, selectedMonthKey }) {
     const { colors } = useTheme();
     const { t } = useLanguage();
     const { currency } = useCurrency();
@@ -20,90 +20,121 @@ export default function MonthlyChart({ expenses }) {
     const [stats, setStats] = useState({ highest: 0, lowest: 0, average: 0 });
     const [trendData, setTrendData] = useState(null);
     const [activeBar, setActiveBar] = useState(null);
+    const requestIdRef = useRef(0);
 
     useEffect(() => {
-        processData();
-    }, [expenses, currency]);
+        let isActive = true;
+        const requestId = requestIdRef.current + 1;
+        requestIdRef.current = requestId;
 
-    const processData = async () => {
-        if (!expenses || expenses.length === 0) {
-            setChartData(null);
-            setTrendData(null);
-            return;
-        }
-
-        const lastMonths = getLastNMonths(6);
-        const grouped = groupByMonth(expenses);
-
-        // Count expenses per month
-        const expenseCounts = {};
-        expenses.forEach((exp) => {
-            const date = new Date(exp.date);
-            const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            expenseCounts[monthYear] = (expenseCounts[monthYear] || 0) + 1;
-        });
-
-        const data = await Promise.all(
-            lastMonths.map(async (month) => {
-                const amountInEUR = grouped[month.key] || 0;
-                const converted = await currencyService.convert(amountInEUR, currency);
-                return converted;
-            })
-        );
-
-        const nonZeroData = data.filter(v => v > 0);
-        const highest = nonZeroData.length > 0 ? Math.max(...nonZeroData) : 0;
-        const lowest = nonZeroData.length > 0 ? Math.min(...nonZeroData) : 0;
-        const average = nonZeroData.length > 0
-            ? nonZeroData.reduce((a, b) => a + b, 0) / nonZeroData.length
-            : 0;
-
-        setStats({ highest, lowest, average });
-
-        // Calculate trend (current month vs previous month)
-        const currentMonthValue = data[5];
-        const previousMonthValue = data[4];
-        if (previousMonthValue > 0 && currentMonthValue > 0) {
-            const percentage = ((currentMonthValue - previousMonthValue) / previousMonthValue) * 100;
-            setTrendData({
-                percentage: Math.abs(percentage).toFixed(0),
-                isIncrease: percentage > 0,
-            });
-        } else {
-            setTrendData(null);
-        }
-
-        // Build bar data with colors
-        const barData = lastMonths.map((m, i) => {
-            const value = data[i];
-            let frontColor;
-
-            if (value === 0) {
-                frontColor = colors.border;
-            } else if (value === highest && nonZeroData.length > 1) {
-                frontColor = colors.error;
-            } else if (value > average) {
-                frontColor = colors.warning;
-            } else {
-                frontColor = colors.success;
+        const run = async () => {
+            if (!expenses || expenses.length === 0) {
+                if (!isActive || requestIdRef.current !== requestId) return;
+                setChartData(null);
+                setTrendData(null);
+                setStats({ highest: 0, lowest: 0, average: 0 });
+                return;
             }
 
-            return {
-                value,
-                label: m.label,
-                frontColor,
-                onPress: () => {
-                    setActiveBar({
-                        monthLabel: m.label,
-                        value,
-                        count: expenseCounts[m.key] || 0,
-                    });
-                },
-            };
-        });
+            const lastMonths = getLastNMonths(6);
+            const rates = await currencyService.getRates();
+            if (!isActive || requestIdRef.current !== requestId) return;
 
-        setChartData(barData);
-    };
+            const convertToEUR = (amount, fromCurrency) => {
+                if (fromCurrency === 'EUR') return amount;
+                const rate = rates && rates[fromCurrency];
+                if (!rate) return amount;
+                return amount / rate;
+            };
+
+            const rateTo = currency === 'EUR' ? 1 : (rates && rates[currency]) || null;
+
+            const normalizedExpenses = expenses.map((exp) => {
+                const amount = Number(exp.amount) || 0;
+                const amountEUR = exp.currency && exp.currency !== 'EUR'
+                    ? convertToEUR(amount, exp.currency)
+                    : amount;
+                return { ...exp, amount: amountEUR };
+            });
+            const grouped = groupByMonth(normalizedExpenses);
+
+            const expenseCounts = {};
+            normalizedExpenses.forEach((exp) => {
+                const date = new Date(exp.date);
+                const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                expenseCounts[monthYear] = (expenseCounts[monthYear] || 0) + 1;
+            });
+
+            const data = lastMonths.map((month) => {
+                const amountInEUR = grouped[month.key] || 0;
+                return rateTo ? amountInEUR * rateTo : amountInEUR;
+            });
+
+            const nonZeroData = data.filter((v) => v > 0);
+            const highest = nonZeroData.length > 0 ? Math.max(...nonZeroData) : 0;
+            const lowest = nonZeroData.length > 0 ? Math.min(...nonZeroData) : 0;
+            const average = nonZeroData.length > 0
+                ? nonZeroData.reduce((a, b) => a + b, 0) / nonZeroData.length
+                : 0;
+
+            const currentMonthValue = data[5];
+            const previousMonthValue = data[4];
+            const nextTrend = (previousMonthValue > 0 && currentMonthValue > 0)
+                ? {
+                    percentage: Math.abs(((currentMonthValue - previousMonthValue) / previousMonthValue) * 100).toFixed(0),
+                    isIncrease: currentMonthValue > previousMonthValue,
+                }
+                : null;
+
+            const barData = lastMonths.map((m, i) => {
+                const value = data[i];
+                let frontColor;
+
+                if (value === 0) {
+                    frontColor = colors.border;
+                } else if (value === highest && nonZeroData.length > 1) {
+                    frontColor = colors.error;
+                } else if (value > average) {
+                    frontColor = colors.warning;
+                } else {
+                    frontColor = colors.success;
+                }
+
+                const isSelected = selectedMonthKey && selectedMonthKey === m.key;
+                const finalColor = selectedMonthKey
+                    ? (isSelected ? frontColor : `${frontColor}66`)
+                    : frontColor;
+
+                return {
+                    value,
+                    label: m.label,
+                    frontColor: finalColor,
+                    onPress: () => {
+                        setActiveBar({
+                            monthLabel: m.label,
+                            monthKey: m.key,
+                            value,
+                            count: expenseCounts[m.key] || 0,
+                        });
+                        if (onMonthPress) {
+                            onMonthPress(m.key);
+                        }
+                    },
+                };
+            });
+
+            if (!isActive || requestIdRef.current !== requestId) return;
+            setStats({ highest, lowest, average });
+            setTrendData(nextTrend);
+            setChartData(barData);
+        };
+
+        run();
+
+        return () => {
+            isActive = false;
+        };
+    }, [expenses, currency, colors, onMonthPress, selectedMonthKey]);
 
     const formatYAxisLabel = (label) => {
         const num = Number(label);
@@ -152,7 +183,7 @@ export default function MonthlyChart({ expenses }) {
             {trendData && (
                 <View style={[
                     styles.trendBadge,
-                    { backgroundColor: trendData.isIncrease ? colors.error + '20' : colors.success + '20' },
+                    { backgroundColor: trendData.isIncrease ? colors.errorBg : colors.successBg },
                 ]}>
                     <Ionicons
                         name={trendData.isIncrease ? 'trending-up' : 'trending-down'}
@@ -314,7 +345,7 @@ const createStyles = (colors) => StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        backgroundColor: colors.overlayLight,
         borderRadius: borderRadius.md,
     },
     tooltip: {

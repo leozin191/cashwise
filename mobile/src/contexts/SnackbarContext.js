@@ -92,11 +92,15 @@ export const SnackbarProvider = ({ children }) => {
         showSnackbar({ message, type: 'success', duration });
     };
 
+    const showError = (message, duration) => {
+        showSnackbar({ message, type: 'error', duration });
+    };
+
     const styles = createStyles(colors);
     const appearance = getAppearance(colors, snackbar?.type);
 
     return (
-        <SnackbarContext.Provider value={{ showSnackbar, showSuccess }}>
+        <SnackbarContext.Provider value={{ showSnackbar, showSuccess, showError }}>
             {children}
             {snackbar && (
                 <Animated.View

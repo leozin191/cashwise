@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+﻿import {useEffect, useMemo, useRef, useState} from 'react';
 import {
     View,
     Text,
@@ -58,6 +58,10 @@ export default function AddExpenseModal({
     const [isInstallment, setIsInstallment] = useState(false);
     const [installmentCount, setInstallmentCount] = useState(2);
 
+    const safeInstallmentGroup = useMemo(() => (
+        Array.isArray(installmentGroupToEdit) ? installmentGroupToEdit.filter(Boolean) : null
+    ), [installmentGroupToEdit]);
+
     const translateY = useRef(new Animated.Value(0)).current;
     const SCREEN_HEIGHT = Dimensions.get('window').height;
     const DISMISS_THRESHOLD = 100;
@@ -105,24 +109,23 @@ export default function AddExpenseModal({
     }, [expenseToEdit, currency]);
 
     useEffect(() => {
-        if (expenseToEdit || !installmentGroupToEdit) return;
-        if (!Array.isArray(installmentGroupToEdit) || installmentGroupToEdit.length === 0) return;
+        if (expenseToEdit || !safeInstallmentGroup || safeInstallmentGroup.length === 0) return;
 
         const totalCount = Math.max(
-            ...installmentGroupToEdit.map((item) => item._installmentTotal || 0),
-            installmentGroupToEdit.length
+            ...safeInstallmentGroup.map((item) => item._installmentTotal || 0),
+            safeInstallmentGroup.length
         );
-        const totalAmount = installmentGroupToEdit.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-        const firstDate = installmentGroupToEdit.reduce((min, item) => {
+        const totalAmount = safeInstallmentGroup.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        const firstDate = safeInstallmentGroup.reduce((min, item) => {
             const current = new Date(item.date);
             return current < min ? current : min;
-        }, new Date(installmentGroupToEdit[0].date));
-        const baseDescription = installmentGroupToEdit[0]?.description
+        }, new Date(safeInstallmentGroup[0].date));
+        const baseDescription = safeInstallmentGroup[0]?.description
             ?.replace(/\s*\(\d+\/\d+\)$/, '')
             .trim();
-        const firstCurrency = installmentGroupToEdit[0]?.currency || currency;
-        const groupCategory = installmentGroupToEdit.every((item) => item.category === installmentGroupToEdit[0].category)
-            ? (installmentGroupToEdit[0].category || '')
+        const firstCurrency = safeInstallmentGroup[0]?.currency || currency;
+        const groupCategory = safeInstallmentGroup.every((item) => item.category === safeInstallmentGroup[0].category)
+            ? (safeInstallmentGroup[0].category || '')
             : '';
 
         setDescription(baseDescription || '');
@@ -132,10 +135,10 @@ export default function AddExpenseModal({
         setSelectedDate(firstDate);
         setIsInstallment(true);
         setInstallmentCount(totalCount);
-    }, [expenseToEdit, installmentGroupToEdit, currency]);
+    }, [expenseToEdit, safeInstallmentGroup, currency]);
 
     useEffect(() => {
-        if (expenseToEdit || installmentGroupToEdit || !prefillExpense) return;
+        if (expenseToEdit || safeInstallmentGroup || !prefillExpense) return;
         setDescription(prefillExpense.description || '');
         setAmount(prefillExpense.amount ? prefillExpense.amount.toString() : '');
         setCategory(prefillExpense.category || '');
@@ -143,7 +146,7 @@ export default function AddExpenseModal({
         setSelectedDate(new Date());
         setIsInstallment(false);
         setInstallmentCount(2);
-    }, [expenseToEdit, installmentGroupToEdit, prefillExpense, currency]);
+    }, [expenseToEdit, safeInstallmentGroup, prefillExpense, currency]);
 
     const checkBudgetAlert = async (expense) => {
         try {
@@ -194,12 +197,60 @@ export default function AddExpenseModal({
         ));
     };
 
+    const createInstallmentGroupId = () => (
+        `inst_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    );
+
+    const buildInstallmentPayloads = (baseDate, totalAmount, count, groupId) => {
+        const installments = splitInstallments(totalAmount, count);
+        const trimmedDescription = description.trim();
+        return installments.map((installmentAmount, index) => {
+            const parcelDate = new Date(baseDate);
+            parcelDate.setMonth(parcelDate.getMonth() + index);
+            return {
+                description: `${trimmedDescription} (${index + 1}/${count})`,
+                amount: installmentAmount,
+                currency: selectedCurrency,
+                date: parcelDate.toISOString().split('T')[0],
+                ...(category && { category }),
+                ...(groupId && { groupId }),
+            };
+        });
+    };
+
+    const createInstallments = async (payloads) => {
+        const created = [];
+        for (const payload of payloads) {
+            const result = await expenseService.create(payload);
+            created.push(result);
+        }
+        return created;
+    };
+
+    const rollbackInstallments = async (createdExpenses) => {
+        const ids = createdExpenses.map((item) => item.id).filter(Boolean);
+        if (ids.length === 0) return;
+        await Promise.allSettled(ids.map((expenseId) => expenseService.delete(expenseId)));
+    };
+
+    const getInstallmentIndex = (item) => {
+        if (item?._installmentIndex) return item._installmentIndex;
+        const match = item?.description?.match(/\((\d+)\/(\d+)\)$/);
+        return match ? parseInt(match[1], 10) : 0;
+    };
+
+    const sortInstallmentItems = (items) => (
+        [...(Array.isArray(items) ? items.filter(Boolean) : [])]
+            .map((item) => ({ ...item, _sortIndex: getInstallmentIndex(item) }))
+            .sort((a, b) => a._sortIndex - b._sortIndex)
+    );
+
     const handleSave = async () => {
         if (!description.trim()) {
             Alert.alert(t('attention'), t('enterDescription'));
             return;
         }
-        if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        if (!amount || !Number.isFinite(parseFloat(amount)) || parseFloat(amount) <= 0) {
             Alert.alert(t('attention'), t('enterValidAmount'));
             return;
         }
@@ -207,42 +258,73 @@ export default function AddExpenseModal({
         try {
             setSaving(true);
 
-            if (installmentGroupToEdit && isInstallment && installmentCount > 1) {
+            if (safeInstallmentGroup && safeInstallmentGroup.length > 0 && isInstallment && installmentCount > 1) {
                 const baseDate = new Date(selectedDate);
                 const totalAmount = parseFloat(amount);
-                const idsToDelete = installmentGroupToEdit.map((item) => item.id).filter(Boolean);
-                const installments = splitInstallments(totalAmount, installmentCount);
+                const existingGroupId = safeInstallmentGroup.find((item) => item?.groupId)?.groupId;
+                const groupId = existingGroupId || createInstallmentGroupId();
+                const payloads = buildInstallmentPayloads(baseDate, totalAmount, installmentCount, groupId);
+                const sortedItems = sortInstallmentItems(safeInstallmentGroup);
+                const updatePairs = [];
+                const createPayloads = [];
 
-                if (idsToDelete.length === 0) {
-                    Alert.alert(t('error'), t('couldNotSave'));
-                    return;
-                }
-
-                const deleteResults = await Promise.allSettled(
-                    idsToDelete.map((expenseId) => expenseService.delete(expenseId))
-                );
-                const deleteFailed = deleteResults.some((result) => result.status === 'rejected');
-                if (deleteFailed) {
-                    Alert.alert(t('error'), t('couldNotDelete'));
-                    return;
-                }
-
-                for (let i = 0; i < installmentCount; i++) {
-                    const parcelDate = new Date(baseDate);
-                    parcelDate.setMonth(parcelDate.getMonth() + i);
-                    const parcelData = {
-                        description: `${description.trim()} (${i + 1}/${installmentCount})`,
-                        amount: installments[i],
-                        currency: selectedCurrency,
-                        date: parcelDate.toISOString().split('T')[0],
-                        ...(category && { category }),
-                    };
-
-                    const result = await expenseService.create(parcelData);
-
-                    if (i === 0) {
-                        await checkBudgetAlert(result);
+                sortedItems.forEach((item, index) => {
+                    const payload = payloads[index];
+                    if (!payload) return;
+                    if (item.id) {
+                        updatePairs.push({ id: item.id, payload });
+                    } else {
+                        createPayloads.push(payload);
                     }
+                });
+
+                if (payloads.length > sortedItems.length) {
+                    createPayloads.push(...payloads.slice(sortedItems.length));
+                }
+
+                const deleteIds = sortedItems
+                    .slice(payloads.length)
+                    .map((item) => item.id)
+                    .filter(Boolean);
+
+                if (updatePairs.length > 0) {
+                    const updateResults = await Promise.allSettled(
+                        updatePairs.map(({ id, payload }) => expenseService.update(id, payload))
+                    );
+                    const updateFailed = updateResults.some((result) => result.status === 'rejected');
+                    if (updateFailed) {
+                        Alert.alert(t('error'), t('couldNotSave'));
+                        return;
+                    }
+                }
+
+                let createdExpenses = [];
+                if (createPayloads.length > 0) {
+                    try {
+                        createdExpenses = await createInstallments(createPayloads);
+                    } catch (error) {
+                        await rollbackInstallments(createdExpenses);
+                        Alert.alert(t('error'), t('couldNotSave'));
+                        return;
+                    }
+                }
+
+                if (deleteIds.length > 0) {
+                    const deleteResults = await Promise.allSettled(
+                        deleteIds.map((expenseId) => expenseService.delete(expenseId))
+                    );
+                    const deleteFailed = deleteResults.some((result) => result.status === 'rejected');
+                    if (deleteFailed) {
+                        Alert.alert(t('error'), t('couldNotDelete'));
+                        handleClose();
+                        onSuccess();
+                        return;
+                    }
+                }
+
+                const sampleExpense = createdExpenses[0] || updatePairs[0]?.payload;
+                if (sampleExpense) {
+                    await checkBudgetAlert(sampleExpense);
                 }
 
                 showSuccess(t('installmentsUpdated'));
@@ -250,25 +332,20 @@ export default function AddExpenseModal({
             } else if (!expenseToEdit && isInstallment && installmentCount > 1) {
                 const baseDate = new Date(selectedDate);
                 const totalAmount = parseFloat(amount);
-                const installments = splitInstallments(totalAmount, installmentCount);
+                const groupId = createInstallmentGroupId();
+                const payloads = buildInstallmentPayloads(baseDate, totalAmount, installmentCount, groupId);
+                let createdExpenses = [];
 
-                for (let i = 0; i < installmentCount; i++) {
-                    const parcelDate = new Date(baseDate);
-                    parcelDate.setMonth(parcelDate.getMonth() + i);
+                try {
+                    createdExpenses = await createInstallments(payloads);
+                } catch (error) {
+                    await rollbackInstallments(createdExpenses);
+                    Alert.alert(t('error'), t('couldNotSave'));
+                    return;
+                }
 
-                    const parcelData = {
-                        description: `${description.trim()} (${i + 1}/${installmentCount})`,
-                        amount: installments[i],
-                        currency: selectedCurrency,
-                        date: parcelDate.toISOString().split('T')[0],
-                        ...(category && { category }),
-                    };
-
-                    const result = await expenseService.create(parcelData);
-
-                    if (i === 0) {
-                        await checkBudgetAlert(result);
-                    }
+                if (createdExpenses[0]) {
+                    await checkBudgetAlert(createdExpenses[0]);
                 }
 
                 showSuccess(`${installmentCount} ${t('installmentsCreated')}`);
@@ -280,6 +357,7 @@ export default function AddExpenseModal({
                     currency: selectedCurrency,
                     date: selectedDate.toISOString().split('T')[0],
                     ...(category && { category }),
+                    ...(expenseToEdit?.groupId && { groupId: expenseToEdit.groupId }),
                 };
 
                 if (expenseToEdit) {
@@ -305,7 +383,6 @@ export default function AddExpenseModal({
             onSuccess();
         } catch (error) {
             Alert.alert(t('error'), t('couldNotSave'));
-            console.error(error);
         } finally {
             setSaving(false);
         }
@@ -331,7 +408,7 @@ export default function AddExpenseModal({
     const installmentAmounts = hasValidAmount ? splitInstallments(parsedAmount, installmentCount) : [];
     const firstInstallmentAmount = installmentAmounts[0] || 0;
     const lastInstallmentAmount = installmentAmounts[installmentAmounts.length - 1] || 0;
-    const isInstallmentLocked = !!installmentGroupToEdit;
+    const isInstallmentLocked = !!safeInstallmentGroup;
     const currencyFlag = CURRENCIES.find((curr) => curr.code === currency)?.flag || '';
     const defaultCurrencyTemplate = t('defaultCurrencyInfo');
     const defaultCurrencyInfoText = (
@@ -352,16 +429,14 @@ export default function AddExpenseModal({
                     <View style={styles.overlayTouchArea} />
                 </TouchableWithoutFeedback>
                 <Animated.View style={[styles.modal, { transform: [{ translateY }] }]}>
-                    {/* Drag Handle */}
                     <View {...panResponder.panHandlers}>
                         <View style={styles.handleBar} />
                     </View>
-                    {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>
                             {expenseToEdit
                                 ? t('editExpense')
-                                : installmentGroupToEdit
+                                : safeInstallmentGroup
                                     ? t('editInstallments')
                                     : t('newExpense')}
                         </Text>
@@ -370,9 +445,7 @@ export default function AddExpenseModal({
                         </TouchableOpacity>
                     </View>
 
-                    {/* Conteúdo */}
                     <ScrollView style={styles.content}>
-                        {/* Banner da IA */}
                         <View style={styles.aiBanner}>
                             <Ionicons name="flash-outline" size={24} color={colors.primary} style={{ marginRight: spacing.md }} />
                             <Text style={styles.aiBannerText}>
@@ -380,7 +453,6 @@ export default function AddExpenseModal({
                             </Text>
                         </View>
 
-                        {/* Campo Descrição */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('description')}</Text>
                             <TextInput
@@ -394,7 +466,6 @@ export default function AddExpenseModal({
                             />
                         </View>
 
-                        {/* Campo Valor */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>
                                 {isInstallment ? t('totalValue') : t('amount')}
@@ -414,7 +485,6 @@ export default function AddExpenseModal({
                             </View>
                         </View>
 
-                        {/* Data */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('date')}</Text>
                             <TouchableOpacity
@@ -447,7 +517,6 @@ export default function AddExpenseModal({
                             )}
                         </View>
 
-                        {/* Parcelamento — only in create mode */}
                         {!expenseToEdit && (
                             <View style={styles.inputGroup}>
                                 <View style={styles.installmentToggleRow}>
@@ -486,14 +555,14 @@ export default function AddExpenseModal({
                                         {hasValidAmount && (
                                             <View style={styles.installmentInfo}>
                                                 <Text style={styles.installmentInfoText}>
-                                                    {t('installmentValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}
+                                                    {t('installmentValue')}: {CURRENCIES.find(c => c.code === selectedCurrency).symbol || '€'}
                                                     {firstInstallmentAmount.toFixed(2)}
                                                     {firstInstallmentAmount !== lastInstallmentAmount
                                                         ? ` - ${lastInstallmentAmount.toFixed(2)}`
                                                         : ''}
                                                 </Text>
                                                 <Text style={styles.installmentTotalText}>
-                                                    {t('totalValue')}: {CURRENCIES.find(c => c.code === selectedCurrency)?.symbol || '€'}{parsedAmount.toFixed(2)}
+                                                    {t('totalValue')}: {CURRENCIES.find(c => c.code === selectedCurrency).symbol || '€'}{parsedAmount.toFixed(2)}
                                                 </Text>
                                             </View>
                                         )}
@@ -502,7 +571,6 @@ export default function AddExpenseModal({
                             </View>
                         )}
 
-                        {/* Categorias */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('categoryOptional')}</Text>
                             <View style={styles.categoriesGrid}>
@@ -541,7 +609,6 @@ export default function AddExpenseModal({
                             </View>
                         </View>
 
-                        {/* Opções Avançadas */}
                         <TouchableOpacity
                             style={styles.advancedToggle}
                             onPress={() => setShowAdvanced(!showAdvanced)}
@@ -558,10 +625,8 @@ export default function AddExpenseModal({
                             </Text>
                         </TouchableOpacity>
 
-                        {/* Seção Avançada (expandível) */}
                         {showAdvanced && (
                             <View style={styles.advancedSection}>
-                                {/* Moeda */}
                                 <View style={styles.inputGroup}>
                                     <View style={styles.currencyLabelRow}>
                                         <Ionicons name="swap-horizontal-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
@@ -601,7 +666,6 @@ export default function AddExpenseModal({
                                     )}
                                 </View>
 
-                                {/* Informação sobre moeda padrão */}
                                 <View style={styles.infoBox}>
                                     <View style={styles.infoBoxContent}>
                                         <Ionicons name="information-circle-outline" size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
@@ -613,7 +677,6 @@ export default function AddExpenseModal({
                             </View>
                         )}
 
-                        {/* Botão Salvar */}
                         <TouchableOpacity
                             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
                             onPress={handleSave}
@@ -629,10 +692,10 @@ export default function AddExpenseModal({
                                 />
                                 <Text style={styles.saveButtonText}>
                                     {saving
-                                        ? (isInstallment && !expenseToEdit && !installmentGroupToEdit
+                                        ? (isInstallment && !expenseToEdit && !safeInstallmentGroup
                                             ? t('creatingInstallments')
                                             : t('saving'))
-                                        : (expenseToEdit || installmentGroupToEdit)
+                                        : (expenseToEdit || safeInstallmentGroup)
                                             ? t('saveChanges')
                                             : isInstallment
                                                 ? `${t('addExpense')} (${installmentCount}×)`
@@ -641,7 +704,6 @@ export default function AddExpenseModal({
                                 </Text>
                             </View>
                         </TouchableOpacity>
-                        {/* Espaço extra quando avançado está aberto */}
                         {showAdvanced && showCurrencyPicker && (
                             <View style={{ height: 200 }} />
                         )}
