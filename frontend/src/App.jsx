@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
@@ -27,16 +27,14 @@ function AppContent() {
     const [activePage, setActivePage] = useState('dashboard');
     const [showTutorial, setShowTutorial] = useState(false);
 
-    const [checkedTutorial, setCheckedTutorial] = useState(false);
-    if (user && !checkedTutorial) {
-        setCheckedTutorial(true);
-        if (!localStorage.getItem('cashwise_tutorial_done')) {
+    useEffect(() => {
+        if (user && !localStorage.getItem('cashwise_tutorial_done')) {
             setShowTutorial(true);
         }
-    }
-    if (!user && checkedTutorial) {
-        setCheckedTutorial(false);
-    }
+        if (!user) {
+            setShowTutorial(false);
+        }
+    }, [user]);
 
     if (loading) {
         return (

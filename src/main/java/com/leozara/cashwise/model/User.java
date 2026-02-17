@@ -1,5 +1,6 @@
 package com.leozara.cashwise.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -27,6 +29,8 @@ public class User {
     private String email;
 
     @NotBlank
+    @JsonIgnore
+    @ToString.Exclude
     @Column(nullable = false)
     private String password;
 

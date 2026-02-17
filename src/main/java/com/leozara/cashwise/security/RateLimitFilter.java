@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -16,9 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final int MAX_REQUESTS = 10;
-    private static final long WINDOW_MS = 60_000; // 1 minute
+    private static final long WINDOW_MS = 60_000;
 
     private final ConcurrentHashMap<String, RateWindow> clients = new ConcurrentHashMap<>();
+    private volatile long lastCleanup = System.currentTimeMillis();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -30,7 +33,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String clientIp = getClientIp(request);
+        cleanup();
+
+        String clientIp = request.getRemoteAddr();
         String key = clientIp + ":" + path;
 
         RateWindow window = clients.compute(key, (k, existing) -> {
@@ -52,12 +57,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
+    private void cleanup() {
+        long now = System.currentTimeMillis();
+        if (now - lastCleanup < WINDOW_MS) return;
+        lastCleanup = now;
+
+        Iterator<Map.Entry<String, RateWindow>> it = clients.entrySet().iterator();
+        while (it.hasNext()) {
+            if (now - it.next().getValue().windowStart > WINDOW_MS) {
+                it.remove();
+            }
         }
-        return request.getRemoteAddr();
     }
 
     private static class RateWindow {
