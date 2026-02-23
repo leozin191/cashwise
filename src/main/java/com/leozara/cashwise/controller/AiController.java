@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -166,88 +168,168 @@ public class AiController {
     // ── Context builder ────────────────────────────────────────────────────────
 
     private String buildSpendingContext(Long userId, Map<String, Double> exchangeRates, String userCurrency) {
-        LocalDate threeMonthsAgo = LocalDate.now().minusMonths(3);
-        List<ExpenseResponse> expenses = expenseService.getExpensesByDateRange(threeMonthsAgo, LocalDate.now(), userId);
-        List<IncomeResponse> incomes = incomeService.getIncomesByDateRange(threeMonthsAgo, LocalDate.now(), userId);
+        LocalDate today = LocalDate.now();
+        LocalDate threeMonthsAgo = today.minusMonths(3);
+
+        List<ExpenseResponse> expenses = expenseService.getExpensesByDateRange(threeMonthsAgo, today, userId);
+        List<IncomeResponse> incomes = incomeService.getIncomesByDateRange(threeMonthsAgo, today, userId);
         List<SubscriptionResponse> subscriptions = subscriptionService.getActiveSubscriptions(userId);
 
-        // Determine display currency and EUR→display conversion rate
         final String displayCurrency = (userCurrency != null && !userCurrency.isBlank())
                 ? userCurrency.toUpperCase() : "EUR";
-        final double convRate = (!"EUR".equals(displayCurrency) && exchangeRates != null
+        final double eurToDisplay = (!"EUR".equals(displayCurrency) && exchangeRates != null
                 && exchangeRates.containsKey(displayCurrency)
                 && isPlausibleRate(exchangeRates.get(displayCurrency)))
                 ? exchangeRates.get(displayCurrency)
                 : 1.0;
 
-        // Expenses by category (stored in EUR)
-        Map<String, Double> byCategory = new TreeMap<>();
-        double totalExpenses = 0;
-        for (ExpenseResponse e : expenses) {
-            String cat = e.getCategory() != null ? e.getCategory() : "General";
-            double amt = e.getAmount().doubleValue();
-            byCategory.merge(cat, amt, Double::sum);
-            totalExpenses += amt;
+        DateTimeFormatter monthFmt = DateTimeFormatter.ofPattern("yyyy-MM");
+        LocalDate monthStart = today.withDayOfMonth(1);
+        String currentMonthKey = today.format(monthFmt);
+
+        // ── Aggregate incomes (each converted from its own stored currency) ──
+        double totalIncome = 0, currentMonthIncome = 0;
+        Map<String, Double> incomeByMonth = new TreeMap<>();
+        Map<String, Double> incomeByCategory = new TreeMap<>();
+        for (IncomeResponse i : incomes) {
+            double amt = toDisplay(i.getAmount().doubleValue(), i.getCurrency(), exchangeRates, displayCurrency, eurToDisplay);
+            totalIncome += amt;
+            incomeByMonth.merge(i.getDate().format(monthFmt), amt, Double::sum);
+            String cat = i.getCategory() != null ? i.getCategory() : "Other";
+            incomeByCategory.merge(cat, amt, Double::sum);
+            if (!i.getDate().isBefore(monthStart)) currentMonthIncome += amt;
         }
 
-        double totalIncome = incomes.stream()
-                .mapToDouble(i -> i.getAmount().doubleValue())
-                .sum();
+        // ── Aggregate expenses (each converted from its own stored currency) ──
+        double totalExpenses = 0, currentMonthExpenses = 0;
+        Map<String, Double> expenseByMonth = new TreeMap<>();
+        Map<String, Double> expenseByCategory = new TreeMap<>();
+        for (ExpenseResponse e : expenses) {
+            double amt = toDisplay(e.getAmount().doubleValue(), e.getCurrency(), exchangeRates, displayCurrency, eurToDisplay);
+            totalExpenses += amt;
+            expenseByMonth.merge(e.getDate().format(monthFmt), amt, Double::sum);
+            String cat = e.getCategory() != null ? e.getCategory() : "General";
+            expenseByCategory.merge(cat, amt, Double::sum);
+            if (!e.getDate().isBefore(monthStart)) currentMonthExpenses += amt;
+        }
 
-        // Active subscriptions monthly cost
-        double monthlySubscriptionCost = subscriptions.stream()
-                .mapToDouble(s -> {
-                    double amt = s.getAmount().doubleValue();
-                    return "YEARLY".equals(s.getFrequency()) ? amt / 12.0 : amt;
-                })
-                .sum();
+        // ── Subscriptions monthly cost ──
+        double monthlySubscriptionCost = subscriptions.stream().mapToDouble(s -> {
+            double amt = toDisplay(s.getAmount().doubleValue(), s.getCurrency(), exchangeRates, displayCurrency, eurToDisplay);
+            return "YEARLY".equals(s.getFrequency()) ? amt / 12.0 : amt;
+        }).sum();
+
+        Set<String> allMonths = new TreeSet<>();
+        allMonths.addAll(incomeByMonth.keySet());
+        allMonths.addAll(expenseByMonth.keySet());
+        int numMonths = Math.max(allMonths.size(), 1);
+
+        String monthLabel = today.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + today.getYear();
 
         StringBuilder sb = new StringBuilder();
+        sb.append("Today's date: ").append(today).append("\n");
         sb.append("User's display currency: ").append(displayCurrency).append("\n");
-        sb.append("Period: last 3 months\n");
-        sb.append(String.format("Total income: %s %.2f\n", displayCurrency, totalIncome * convRate));
-        sb.append(String.format("Total expenses: %s %.2f\n", displayCurrency, totalExpenses * convRate));
-        sb.append(String.format("Net savings: %s %.2f\n\n", displayCurrency, (totalIncome - totalExpenses) * convRate));
-        sb.append("Spending by category:\n");
-        byCategory.entrySet().stream()
-                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
-                .forEach(entry -> sb.append(String.format(
-                        "- %s: %s %.2f (avg %s %.2f/month)\n",
-                        entry.getKey(),
-                        displayCurrency, entry.getValue() * convRate,
-                        displayCurrency, entry.getValue() * convRate / 3)));
+        sb.append("Data covers: last 3 months\n\n");
 
-        // Current month
-        LocalDate monthStart = LocalDate.now().withDayOfMonth(1);
-        double currentMonthSpend = expenses.stream()
-                .filter(e -> !e.getDate().isBefore(monthStart))
-                .mapToDouble(e -> e.getAmount().doubleValue())
-                .sum();
-        sb.append(String.format("\nCurrent month spending so far: %s %.2f\n",
-                displayCurrency, currentMonthSpend * convRate));
+        // Current month — this is the most important section for "how much this month" questions
+        sb.append("=== CURRENT MONTH (").append(monthLabel).append(", in progress) ===\n");
+        sb.append(String.format("Income this month:   %s %.2f\n", displayCurrency, currentMonthIncome));
+        sb.append(String.format("Expenses this month: %s %.2f\n", displayCurrency, currentMonthExpenses));
+        sb.append(String.format("Net this month:      %s %.2f\n\n", displayCurrency, currentMonthIncome - currentMonthExpenses));
+
+        // 3-month summary
+        sb.append("=== 3-MONTH SUMMARY ===\n");
+        sb.append(String.format("Total income:         %s %.2f\n", displayCurrency, totalIncome));
+        sb.append(String.format("Total expenses:       %s %.2f\n", displayCurrency, totalExpenses));
+        sb.append(String.format("Net savings:          %s %.2f\n", displayCurrency, totalIncome - totalExpenses));
+        sb.append(String.format("Avg monthly income:   %s %.2f\n", displayCurrency, totalIncome / numMonths));
+        sb.append(String.format("Avg monthly expenses: %s %.2f\n\n", displayCurrency, totalExpenses / numMonths));
+
+        // Month-by-month breakdown
+        if (!allMonths.isEmpty()) {
+            sb.append("=== MONTHLY BREAKDOWN ===\n");
+            for (String month : allMonths) {
+                double mInc = incomeByMonth.getOrDefault(month, 0.0);
+                double mExp = expenseByMonth.getOrDefault(month, 0.0);
+                String tag = month.equals(currentMonthKey) ? " ← current month" : "";
+                sb.append(String.format("%s: Income %s %.2f | Expenses %s %.2f | Net %s %.2f%s\n",
+                        month, displayCurrency, mInc, displayCurrency, mExp,
+                        displayCurrency, mInc - mExp, tag));
+            }
+            sb.append("\n");
+        }
+
+        // Expenses by category
+        if (!expenseByCategory.isEmpty()) {
+            sb.append("=== EXPENSES BY CATEGORY (3 months) ===\n");
+            expenseByCategory.entrySet().stream()
+                    .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                    .forEach(e -> sb.append(String.format("- %s: %s %.2f (avg %s %.2f/month)\n",
+                            e.getKey(), displayCurrency, e.getValue(),
+                            displayCurrency, e.getValue() / numMonths)));
+            sb.append("\n");
+        }
+
+        // Income by source/category
+        if (!incomeByCategory.isEmpty()) {
+            sb.append("=== INCOME SOURCES (3 months) ===\n");
+            incomeByCategory.entrySet().stream()
+                    .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                    .forEach(e -> sb.append(String.format("- %s: %s %.2f\n",
+                            e.getKey(), displayCurrency, e.getValue())));
+            sb.append("\n");
+        }
 
         // Subscriptions
         if (!subscriptions.isEmpty()) {
-            sb.append(String.format("\nActive subscriptions (%d total, %s %.2f/month):\n",
-                    subscriptions.size(), displayCurrency, monthlySubscriptionCost * convRate));
-            subscriptions.forEach(s -> sb.append(String.format(
-                    "- %s: %s %.2f (%s)\n",
-                    s.getDescription(), displayCurrency,
-                    s.getAmount().doubleValue() * convRate, s.getFrequency())));
+            sb.append(String.format("=== ACTIVE SUBSCRIPTIONS (%d total, %s %.2f/month) ===\n",
+                    subscriptions.size(), displayCurrency, monthlySubscriptionCost));
+            subscriptions.forEach(s -> {
+                double amt = toDisplay(s.getAmount().doubleValue(), s.getCurrency(), exchangeRates, displayCurrency, eurToDisplay);
+                sb.append(String.format("- %s: %s %.2f (%s)\n",
+                        s.getDescription(), displayCurrency, amt, s.getFrequency()));
+            });
+            sb.append("\n");
         }
 
+        // Exchange rates
         if (exchangeRates != null && !exchangeRates.isEmpty()) {
-            sb.append("\nCurrent exchange rates (1 EUR = ...):\n");
+            sb.append("=== EXCHANGE RATES (1 EUR = ...) ===\n");
             exchangeRates.entrySet().stream()
                     .filter(e -> isPlausibleRate(e.getValue()))
                     .sorted(Map.Entry.comparingByKey())
                     .forEach(e -> sb.append(String.format("  %s: %.4f\n", e.getKey(), e.getValue())));
-            sb.append("Use ONLY these rates for any currency conversions. Do not use your own training data rates.\n");
+            sb.append("Use ONLY these rates for currency conversions. Do not use your own training data rates.\n\n");
         }
 
-        sb.append(String.format("\nAlways express amounts in %s in your response.\n", displayCurrency));
-
+        sb.append(String.format("Always express amounts in %s in your response.\n", displayCurrency));
         return sb.toString();
+    }
+
+    /**
+     * Converts an amount from its stored currency to the user's display currency.
+     * All conversions go through EUR as the base (rates map is "1 EUR = X").
+     */
+    private double toDisplay(double amount, String storedCurrency,
+                             Map<String, Double> rates, String displayCurrency, double eurToDisplay) {
+        if (storedCurrency == null) return amount * eurToDisplay;
+        String stored = storedCurrency.toUpperCase();
+        String display = displayCurrency.toUpperCase();
+        if (stored.equals(display)) return amount;
+
+        // Convert stored → EUR
+        double amountInEur;
+        if ("EUR".equals(stored)) {
+            amountInEur = amount;
+        } else {
+            Double eurToStored = (rates != null) ? rates.get(stored) : null;
+            if (eurToStored == null || !isPlausibleRate(eurToStored)) return amount;
+            amountInEur = amount / eurToStored;
+        }
+
+        // Convert EUR → display
+        if ("EUR".equals(display)) return amountInEur;
+        return amountInEur * eurToDisplay;
     }
 
     /** Reject exchange rates outside any realistic currency pair range (0.0001 – 100000). */

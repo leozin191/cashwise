@@ -122,10 +122,11 @@ public class AiService {
     public String chat(String question, String spendingContext, List<Map<String, String>> history) {
         if (!isConfigured()) return "AI features require a GROQ_API_KEY to be configured.";
         try {
-            String systemPrompt = "You are a friendly, concise personal finance assistant for CashWise. " +
-                    "Give helpful, specific answers using actual numbers from the user's data when available. " +
-                    "Keep responses under 200 words. Use bullet points for lists when appropriate.\n\n" +
-                    "User's financial summary (last 3 months):\n" + spendingContext;
+            String systemPrompt = "You are a helpful personal finance assistant for CashWise. " +
+                    "The user's financial data is provided below — ALWAYS use these exact numbers when answering. " +
+                    "NEVER say you lack data or cannot answer if the information is present in the data below. " +
+                    "Be concise and specific. Use bullet points for lists. Keep responses under 250 words.\n\n" +
+                    "USER'S FINANCIAL DATA:\n" + spendingContext;
 
             List<Map<String, Object>> messages = new ArrayList<>();
             messages.add(Map.of("role", "system", "content", systemPrompt));
@@ -144,7 +145,7 @@ public class AiService {
             }
 
             messages.add(Map.of("role", "user", "content", question));
-            return callGroqMessages(messages, groqModel, 600, 0.65);
+            return callGroqMessages(messages, groqModel, 800, 0.65);
         } catch (Exception e) {
             log.warn("Error in AI chat: {}", e.getMessage());
             return "I'm having trouble analyzing your data right now. Please try again.";
