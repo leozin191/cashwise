@@ -12,8 +12,7 @@ import { createStyles } from '../screens/homeStyles';
 export default function HomeIncomeSection({
     filteredIncomes,
     incomeTotal,
-    incomePeriodFilter,
-    setIncomePeriodFilter,
+    monthLabel,
     incomeSearchQuery,
     setIncomeSearchQuery,
     incomeCategoryFilter,
@@ -37,7 +36,7 @@ export default function HomeIncomeSection({
                     <Ionicons name="cash-outline" size={18} color={colors.success} style={{ marginRight: spacing.sm }} />
                     <View>
                         <Text style={styles.incomeTitle}>{t('income')}</Text>
-                        <Text style={styles.incomeSubtitle}>{t(incomePeriodFilter)}</Text>
+                        {monthLabel ? <Text style={styles.incomeSubtitle}>{monthLabel}</Text> : null}
                     </View>
                 </View>
                 <CurrencyDisplay
@@ -47,28 +46,6 @@ export default function HomeIncomeSection({
             </View>
 
             <View style={styles.incomeFilters}>
-                <View style={styles.incomePeriodRow}>
-                    {['thisMonth', 'last30Days', 'all'].map((period) => (
-                        <TouchableOpacity
-                            key={period}
-                            style={[
-                                styles.incomePeriodChip,
-                                incomePeriodFilter === period && styles.incomePeriodChipActive,
-                            ]}
-                            onPress={() => setIncomePeriodFilter(period)}
-                            activeOpacity={0.85}
-                        >
-                            <Text
-                                style={[
-                                    styles.incomePeriodText,
-                                    incomePeriodFilter === period && styles.incomePeriodTextActive,
-                                ]}
-                            >
-                                {t(period)}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
                 <View style={styles.incomeSearch}>
                     <Ionicons name="search-outline" size={18} color={colors.textLight} style={{ marginRight: spacing.sm }} />
                     <TextInput

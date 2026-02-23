@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { subscriptionService } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 
@@ -25,7 +25,7 @@ export default function SubscriptionsPage() {
             .then(setSubs)
             .catch(() => toast.error('Failed to load subscriptions'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     useEffect(() => { load(); }, [load]);
 

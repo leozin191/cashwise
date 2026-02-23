@@ -10,11 +10,17 @@ import {
     TextInput,
     Alert,
     Platform,
+    ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { incomeService } from '../services/api';
+import { incomeService, aiService } from '../services/api';
+import * as Haptics from 'expo-haptics';
 import { CURRENCIES } from '../constants/currencies';
+import { getCategoryColor } from '../constants/categories';
+import CategoryIcon from './CategoryIcon';
+
+const INCOME_CATEGORIES = ['Salary', 'Investment', 'Interest', 'NetSales', 'Gift', 'Remittances', 'Savings', 'Cashback'];
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -40,9 +46,39 @@ export default function AddIncomeModal({
     const [selectedDate, setSelectedDate] = useState(
         incomeToEdit?.date ? new Date(incomeToEdit.date) : new Date()
     );
+    const [category, setCategory] = useState(incomeToEdit?.category || '');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [showNlInput, setShowNlInput] = useState(false);
+    const [nlText, setNlText] = useState('');
+    const [nlLoading, setNlLoading] = useState(false);
+
+    const applyParsed = (parsed) => {
+        if (parsed.description) setDescription(parsed.description);
+        if (parsed.amount) setAmount(String(parsed.amount));
+        if (parsed.category) setCategory(parsed.category);
+        if (parsed.currency) setSelectedCurrency(parsed.currency);
+        if (parsed.date) {
+            const d = new Date(parsed.date);
+            if (!isNaN(d.getTime())) setSelectedDate(d);
+        }
+    };
+
+    const handleNlSubmit = async () => {
+        if (!nlText.trim()) return;
+        setNlLoading(true);
+        try {
+            const parsed = await aiService.parseIncome(nlText.trim());
+            applyParsed(parsed);
+            setShowNlInput(false);
+            setNlText('');
+        } catch {
+            Alert.alert(t('error'), t('couldNotParseExpense') || 'Could not parse. Please fill in manually.');
+        } finally {
+            setNlLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!incomeToEdit) return;
@@ -50,6 +86,7 @@ export default function AddIncomeModal({
         setAmount(incomeToEdit.amount?.toString() || '');
         setSelectedCurrency(incomeToEdit.currency || currency);
         setSelectedDate(incomeToEdit.date ? new Date(incomeToEdit.date) : new Date());
+        setCategory(incomeToEdit.category || '');
     }, [incomeToEdit, currency]);
 
     useEffect(() => {
@@ -58,6 +95,7 @@ export default function AddIncomeModal({
         setAmount(prefillIncome.amount ? prefillIncome.amount.toString() : '');
         setSelectedCurrency(prefillIncome.currency || currency);
         setSelectedDate(new Date());
+        setCategory('');
     }, [incomeToEdit, prefillIncome, currency]);
 
     const handleSave = async () => {
@@ -77,8 +115,10 @@ export default function AddIncomeModal({
                 amount: parseFloat(amount),
                 currency: selectedCurrency,
                 date: selectedDate.toISOString().split('T')[0],
+                ...(category && { category }),
             };
 
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             if (incomeToEdit) {
                 await incomeService.update(incomeToEdit.id, incomeData);
                 showSuccess(t('incomeUpdated'));
@@ -99,10 +139,13 @@ export default function AddIncomeModal({
     const handleClose = () => {
         setDescription('');
         setAmount('');
+        setCategory('');
         setSelectedCurrency(currency);
         setSelectedDate(new Date());
         setShowDatePicker(false);
         setShowCurrencyPicker(false);
+        setShowNlInput(false);
+        setNlText('');
         onClose();
     };
 
@@ -124,6 +167,48 @@ export default function AddIncomeModal({
                     </View>
 
                     <ScrollView style={styles.content}>
+                        {/* AI smart input */}
+                        {!showNlInput ? (
+                            <TouchableOpacity
+                                style={styles.aiButton}
+                                onPress={() => setShowNlInput(true)}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+                                <Text style={styles.aiButtonText}>{t('smartInput') || 'Smart input'}</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={styles.nlInputContainer}>
+                                <TextInput
+                                    style={styles.nlInput}
+                                    placeholder={t('nlIncomePlaceholder') || 'e.g. salary 1500 today'}
+                                    placeholderTextColor={colors.textLighter}
+                                    value={nlText}
+                                    onChangeText={setNlText}
+                                    autoFocus
+                                    returnKeyType="go"
+                                    onSubmitEditing={handleNlSubmit}
+                                    maxLength={300}
+                                />
+                                <TouchableOpacity
+                                    style={[styles.nlGoButton, nlLoading && styles.nlGoButtonDisabled]}
+                                    onPress={handleNlSubmit}
+                                    disabled={nlLoading}
+                                >
+                                    {nlLoading
+                                        ? <ActivityIndicator size={14} color={colors.textWhite} />
+                                        : <Ionicons name="arrow-forward" size={16} color={colors.textWhite} />
+                                    }
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.nlCancelButton}
+                                    onPress={() => { setShowNlInput(false); setNlText(''); }}
+                                >
+                                    <Ionicons name="close" size={16} color={colors.textLight} />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('description')}</Text>
                             <TextInput
@@ -134,6 +219,39 @@ export default function AddIncomeModal({
                                 onChangeText={setDescription}
                                 maxLength={200}
                             />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>{t('category')}</Text>
+                            <View style={styles.categoryGrid}>
+                                {INCOME_CATEGORIES.map((cat) => {
+                                    const isSelected = category === cat;
+                                    const catColor = getCategoryColor(cat);
+                                    return (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={[
+                                                styles.categoryChip,
+                                                isSelected && { backgroundColor: catColor, borderColor: catColor },
+                                            ]}
+                                            onPress={() => setCategory(isSelected ? '' : cat)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <CategoryIcon
+                                                category={cat}
+                                                size={14}
+                                                color={isSelected ? '#fff' : catColor}
+                                            />
+                                            <Text style={[
+                                                styles.categoryChipText,
+                                                isSelected && styles.categoryChipTextSelected,
+                                            ]}>
+                                                {t(`categories.${cat}`) || cat}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
                         </View>
 
                         <View style={styles.inputGroup}>
@@ -288,6 +406,63 @@ const createStyles = (colors) =>
         content: {
             marginTop: spacing.sm,
         },
+        aiButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+            gap: spacing.xs,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.xs,
+            borderRadius: borderRadius.full,
+            borderWidth: 1,
+            borderColor: colors.primary,
+            backgroundColor: colors.primaryBg,
+            marginBottom: spacing.md,
+        },
+        aiButtonText: {
+            fontSize: fontSize.xs,
+            fontFamily: fontFamily.semibold,
+            color: colors.primary,
+        },
+        nlInputContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            marginBottom: spacing.md,
+        },
+        nlInput: {
+            flex: 1,
+            backgroundColor: colors.background,
+            borderRadius: borderRadius.md,
+            borderWidth: 1,
+            borderColor: colors.primary,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.sm,
+            fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
+            color: colors.text,
+        },
+        nlGoButton: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        nlGoButtonDisabled: {
+            opacity: 0.6,
+        },
+        nlCancelButton: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
         inputGroup: {
             marginBottom: spacing.lg,
         },
@@ -307,6 +482,30 @@ const createStyles = (colors) =>
             fontSize: fontSize.base,
             fontFamily: fontFamily.regular,
             color: colors.text,
+        },
+        categoryGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: spacing.sm,
+        },
+        categoryChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.xs,
+            borderRadius: borderRadius.full,
+            borderWidth: 1.5,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            gap: spacing.xs,
+        },
+        categoryChipText: {
+            fontSize: fontSize.xs,
+            fontFamily: fontFamily.medium,
+            color: colors.textLight,
+        },
+        categoryChipTextSelected: {
+            color: '#fff',
         },
         amountContainer: {
             flexDirection: 'row',

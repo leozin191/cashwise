@@ -1,11 +1,10 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { authService } from '../services/api';
-
-const AuthContext = createContext(null);
+import { AuthContext } from './auth-context';
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('cashwise_token')));
 
     const logout = useCallback(() => {
         localStorage.removeItem('cashwise_token');
@@ -15,13 +14,13 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         const token = localStorage.getItem('cashwise_token');
         if (!token) {
-            setLoading(false);
             return;
         }
         authService.getProfile()
             .then((profile) => setUser(profile))
             .catch(() => {
                 localStorage.removeItem('cashwise_token');
+                setUser(null);
             })
             .finally(() => setLoading(false));
     }, []);
@@ -35,14 +34,14 @@ export function AuthProvider({ children }) {
     const login = async (email, password) => {
         const res = await authService.login({ email, password });
         localStorage.setItem('cashwise_token', res.token);
-        setUser({ name: res.name, email: res.email });
+        setUser({ name: res.name, email: res.email, username: res.username ?? null });
         return res;
     };
 
     const register = async (name, email, password) => {
         const res = await authService.register({ name, email, password });
         localStorage.setItem('cashwise_token', res.token);
-        setUser({ name: res.name, email: res.email });
+        setUser({ name: res.name, email: res.email, username: res.username ?? null });
         return res;
     };
 
@@ -55,10 +54,4 @@ export function AuthProvider({ children }) {
             {children}
         </AuthContext.Provider>
     );
-}
-
-export function useAuth() {
-    const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error('useAuth must be inside AuthProvider');
-    return ctx;
 }

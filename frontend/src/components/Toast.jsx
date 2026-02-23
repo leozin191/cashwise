@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
-
-const ToastContext = createContext(null);
+import { useState, useCallback, useMemo } from 'react';
+import { ToastContext } from './toastContext';
 
 let toastId = 0;
 
@@ -15,11 +14,11 @@ export function ToastProvider({ children }) {
         }, 4000);
     }, []);
 
-    const toast = {
+    const toast = useMemo(() => ({
         success: (msg) => addToast(msg, 'success'),
         error: (msg) => addToast(msg, 'error'),
         info: (msg) => addToast(msg, 'info'),
-    };
+    }), [addToast]);
 
     return (
         <ToastContext.Provider value={toast}>
@@ -46,10 +45,4 @@ export function ToastProvider({ children }) {
             `}</style>
         </ToastContext.Provider>
     );
-}
-
-export function useToast() {
-    const ctx = useContext(ToastContext);
-    if (!ctx) throw new Error('useToast must be inside ToastProvider');
-    return ctx;
 }

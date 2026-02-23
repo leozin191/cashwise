@@ -187,7 +187,6 @@ export function generateReportHTML({
         .map((sub) => {
             const frequencyLabel = {
                 MONTHLY: safeT('monthly'),
-                WEEKLY: safeT('weekly'),
                 YEARLY: safeT('yearly'),
             }[sub.frequency] || sub.frequency;
 
@@ -233,7 +232,6 @@ export function generateReportHTML({
             <tr>
                 <td>${formatDate(inc.date, locale)}</td>
                 <td>${escapeHtml(inc.description)}</td>
-                <td>${escapeHtml(resolveCategoryLabel(inc.category))}</td>
                 <td>${formatAmount(inc.amount, currencySymbol)}</td>
             </tr>
         `)
@@ -529,7 +527,6 @@ export function generateReportHTML({
                                 <tr>
                                     <th>${escapeHtml(safeT('date'))}</th>
                                     <th>${escapeHtml(safeT('description'))}</th>
-                                    <th>${escapeHtml(safeT('category'))}</th>
                                     <th>${escapeHtml(safeT('amount'))}</th>
                                 </tr>
                             </thead>

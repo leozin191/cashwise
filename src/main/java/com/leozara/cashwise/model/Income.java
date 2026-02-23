@@ -41,8 +41,15 @@ public class Income {
     @Column(nullable = false)
     private LocalDate date;
 
+    @Size(max = 50)
+    @Column
+    private String category;
+
     @Column(name = "user_id")
     private Long userId;
+
+    @Column(name = "household_id")
+    private Long householdId;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

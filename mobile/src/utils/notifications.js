@@ -96,10 +96,6 @@ const clampToDay = (date, day) => {
 
 const addFrequency = (date, frequency, dayOfMonth) => {
     const next = new Date(date);
-    if (frequency === 'WEEKLY') {
-        next.setDate(next.getDate() + 7);
-        return next;
-    }
     if (frequency === 'YEARLY') {
         next.setFullYear(next.getFullYear() + 1);
         return next;

@@ -42,7 +42,7 @@ A full-stack personal finance application with **AI-powered expense categorizati
 - Swipe-to-edit (left) and swipe-to-delete (right) gestures
 
 ### Subscriptions (Auto-Recurring)
-- Create subscriptions (Monthly, Weekly, Yearly)
+- Create subscriptions (Monthly, Yearly)
 - Automatic expense generation via scheduled backend job (runs daily at 00:05)
 - Pause/resume subscriptions with a toggle switch
 - Monthly total displayed in header

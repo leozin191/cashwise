@@ -295,18 +295,7 @@ export default function SettingsScreen() {
                     <Text style={styles.headerTitle}>{t('settings')}</Text>
                     <TouchableOpacity
                         style={styles.headerActionButton}
-                        onPress={() => {
-                            const returnTo = route.params?.returnTo;
-                            if (returnTo) {
-                                navigation.navigate(returnTo);
-                                return;
-                            }
-                            if (navigation.canGoBack()) {
-                                navigation.goBack();
-                            } else {
-                                navigation.navigate('Home');
-                            }
-                        }}
+                        onPress={() => navigation.goBack()}
                         activeOpacity={0.8}
                         accessibilityLabel={t('cancel')}
                         accessibilityRole="button"
@@ -579,6 +568,26 @@ export default function SettingsScreen() {
                         <View style={styles.settingLeft}>
                             <Text style={styles.settingLabel}>{t('monthlyReport')}</Text>
                             <Text style={styles.settingSubtext}>{t('monthlyReportHint')}</Text>
+                        </View>
+                        <Text style={styles.arrow}>&gt;</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.section} onLayout={handleSectionLayout('family')}>
+                    <View style={styles.sectionTitleRow}>
+                        <Ionicons name="people-outline" size={18} color={colors.text} style={{ marginRight: spacing.sm }} />
+                        <Text style={styles.sectionTitle}>{t('household')}</Text>
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.settingItem}
+                        onPress={() => navigation.navigate('Family')}
+                        accessibilityLabel={t('familyAccount')}
+                        accessibilityRole="button"
+                    >
+                        <View style={styles.settingLeft}>
+                            <Text style={styles.settingLabel}>{t('familyAccount')}</Text>
+                            <Text style={styles.settingSubtext}>{t('familyAccountHint')}</Text>
                         </View>
                         <Text style={styles.arrow}>&gt;</Text>
                     </TouchableOpacity>

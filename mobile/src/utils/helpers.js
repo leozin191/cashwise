@@ -185,7 +185,6 @@ export function calculateForecast(expenses = [], subscriptions = [], language = 
         let subscriptionsTotal = 0;
         activeSubscriptions.forEach((sub) => {
             let monthly = parseFloat(sub.amount);
-            if (sub.frequency === 'WEEKLY') monthly *= 4.33;
             if (sub.frequency === 'YEARLY') monthly /= 12;
             subscriptionsTotal += monthly;
         });

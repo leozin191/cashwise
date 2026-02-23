@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { expenseService } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 
@@ -27,7 +27,7 @@ export default function ExpensesPage() {
             .then(setExpenses)
             .catch(() => toast.error('Failed to load expenses'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     useEffect(() => { load(); }, [load]);
 

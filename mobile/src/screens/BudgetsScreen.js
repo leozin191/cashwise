@@ -27,7 +27,7 @@ import CategoryIcon from '../components/CategoryIcon';
 import { getBudgets, saveBudget, deleteBudget, calculateProgress, getAlertLevel } from '../utils/budgets';
 import currencyService from '../services/currency';
 import { filterByThisMonth } from '../utils/helpers';
-import { expenseService } from '../services/api';
+import { expenseService, aiService } from '../services/api';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import ConfirmSheet from '../components/ConfirmSheet';
 
@@ -37,7 +37,7 @@ export default function BudgetsScreen() {
     const { colors } = useTheme();
     const { t } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
-    const { showSuccess } = useSnackbar();
+    const { showSuccess, showError } = useSnackbar();
 
     const [budgets, setBudgets] = useState({});
     const [expenses, setExpenses] = useState([]);
@@ -50,6 +50,8 @@ export default function BudgetsScreen() {
     const [convertedSpent, setConvertedSpent] = useState({});
     const [editingBudget, setEditingBudget] = useState(null);
     const [confirmConfig, setConfirmConfig] = useState(null);
+    const [budgetAdvice, setBudgetAdvice] = useState(null);
+    const [adviceLoading, setAdviceLoading] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -113,7 +115,7 @@ export default function BudgetsScreen() {
             return;
         }
 
-        const success = await saveBudget(selectedCategory, parseFloat(limitValue), currency);
+        const success = await saveBudget(selectedCategory, parseFloat(limitValue), currency, editingBudget?.id);
 
         if (success) {
             showSuccess(editingBudget ? t('budgetUpdated') : t('budgetSaved'));
@@ -127,7 +129,7 @@ export default function BudgetsScreen() {
 
     const handleEditBudget = (category, budget) => {
         const convertedLimit = convertedBudgets[category] || budget.limit;
-        setEditingBudget({ category, limit: convertedLimit, currency: budget.currency });
+        setEditingBudget({ id: budget.id, category, limit: convertedLimit, currency: budget.currency });
         setSelectedCategory(category);
         setLimitValue(convertedLimit.toFixed(0));
         setShowModal(true);
@@ -140,7 +142,7 @@ export default function BudgetsScreen() {
         setEditingBudget(null);
     };
 
-    const handleDeleteBudget = (category) => {
+    const handleDeleteBudget = (id) => {
         setConfirmConfig({
             title: t('deleteBudget'),
             message: t('deleteBudgetConfirm'),
@@ -149,7 +151,7 @@ export default function BudgetsScreen() {
             primaryTone: 'destructive',
             onPrimary: async () => {
                 setConfirmConfig(null);
-                await deleteBudget(category);
+                await deleteBudget(id);
                 showSuccess(t('budgetDeleted'));
                 loadData();
             },
@@ -221,6 +223,25 @@ export default function BudgetsScreen() {
     const totalSpent = budgetItems.reduce((sum, item) => sum + item.spent, 0);
     const totalRemaining = totalBudget - totalSpent;
     const remainingLabel = totalRemaining >= 0 ? t('remaining') : t('exceeded');
+
+    const loadBudgetAdvice = async () => {
+        setAdviceLoading(true);
+        try {
+            const advice = await aiService.budgetAdvice();
+            setBudgetAdvice(Array.isArray(advice) ? advice : []);
+        } catch {
+            showError(t('networkError'));
+        } finally {
+            setAdviceLoading(false);
+        }
+    };
+
+    const applyAdvice = (item) => {
+        setEditingBudget(null);
+        setSelectedCategory(item.category);
+        setLimitValue(String(Math.round(item.suggestedBudget || 0)));
+        setShowModal(true);
+    };
 
     const styles = createStyles(colors);
 
@@ -387,6 +408,59 @@ export default function BudgetsScreen() {
                     </View>
                 )}
 
+                {/* AI Budget Advisor */}
+                <View style={styles.advisorSection}>
+                    <View style={styles.advisorHeader}>
+                        <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                        <Text style={styles.advisorTitle}>{t('aiBudgetAdvisor') || 'AI Budget Advisor'}</Text>
+                    </View>
+                    <Text style={styles.advisorHint}>
+                        {t('aiBudgetAdvisorHint') || 'Get personalized budget limits based on your spending patterns.'}
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.advisorButton, adviceLoading && styles.advisorButtonDisabled]}
+                        onPress={loadBudgetAdvice}
+                        disabled={adviceLoading}
+                        activeOpacity={0.8}
+                    >
+                        {adviceLoading
+                            ? <ActivityIndicator size="small" color={colors.textWhite} />
+                            : <>
+                                <Ionicons name="bulb-outline" size={16} color={colors.textWhite} />
+                                <Text style={styles.advisorButtonText}>{t('getAdvice') || 'Get advice'}</Text>
+                            </>
+                        }
+                    </TouchableOpacity>
+
+                    {Array.isArray(budgetAdvice) && budgetAdvice.map((item, i) => (
+                        <View key={i} style={styles.adviceCard}>
+                            <View style={styles.adviceLeft}>
+                                <CategoryIcon category={item.category} size={20} color={colors.primary} />
+                                <View style={styles.adviceInfo}>
+                                    <Text style={styles.adviceCategory}>
+                                        {t(`categories.${item.category}`) || item.category}
+                                    </Text>
+                                    <Text style={styles.adviceReason}>{item.reason}</Text>
+                                    <Text style={styles.adviceMeta}>
+                                        {t('current') || 'Current'}: {getCurrencyInfo().symbol}{(item.currentMonthlySpend || 0).toFixed(0)}
+                                        {' → '}
+                                        {t('suggested') || 'Suggested'}: {getCurrencyInfo().symbol}{(item.suggestedBudget || 0).toFixed(0)}
+                                    </Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity style={styles.applyButton} onPress={() => applyAdvice(item)} activeOpacity={0.7}>
+                                <Text style={styles.applyButtonText}>{t('apply') || 'Apply'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+
+                    {Array.isArray(budgetAdvice) && budgetAdvice.length === 0 && (
+                        <Text style={styles.noAdviceText}>
+                            {t('noAdviceAvailable') || 'No advice available. Add more expenses first.'}
+                        </Text>
+                    )}
+                </View>
+
                 <TouchableOpacity
                     style={styles.addButton}
                     onPress={() => setShowModal(true)}
@@ -501,7 +575,7 @@ export default function BudgetsScreen() {
                                             style={styles.deleteButton}
                                             onPress={() => {
                                                 handleCloseModal();
-                                                handleDeleteBudget(editingBudget.category);
+                                                handleDeleteBudget(editingBudget.id);
                                             }}
                                         >
                                             <View style={styles.deleteButtonContent}>

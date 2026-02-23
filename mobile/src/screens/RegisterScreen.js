@@ -24,6 +24,7 @@ export default function RegisterScreen({ navigation }) {
     const { colors } = useTheme();
 
     const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -31,8 +32,13 @@ export default function RegisterScreen({ navigation }) {
     const [showPassword, setShowPassword] = useState(false);
 
     const handleRegister = async () => {
-        if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+        if (!name.trim() || !username.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
             Alert.alert(t('error'), t('fillAllFields'));
+            return;
+        }
+
+        if (!/^[a-z0-9_]{3,30}$/.test(username.trim())) {
+            Alert.alert(t('error'), t('usernameInvalid'));
             return;
         }
 
@@ -48,7 +54,7 @@ export default function RegisterScreen({ navigation }) {
 
         setLoading(true);
         try {
-            await register(name.trim(), email.trim(), password);
+            await register(name.trim(), email.trim(), password, username.trim());
         } catch (error) {
             const status = error?.response?.status;
             if (status === 409) {
@@ -96,6 +102,20 @@ export default function RegisterScreen({ navigation }) {
                             onChangeText={setName}
                             autoCapitalize="words"
                             accessibilityLabel={t('name')}
+                        />
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="at-outline" size={20} color={colors.textLight} style={styles.inputIcon} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder={t('usernamePlaceholder')}
+                            placeholderTextColor={colors.textLight}
+                            value={username}
+                            onChangeText={(v) => setUsername(v.toLowerCase())}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            accessibilityLabel={t('username')}
                         />
                     </View>
 

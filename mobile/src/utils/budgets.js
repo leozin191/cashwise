@@ -1,22 +1,33 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { budgetService } from '../services/api';
 
-const BUDGETS_KEY = '@budgets';
-
+/**
+ * Fetch all budgets for the current household and return them as a
+ * category-keyed map: { [category]: { id, limit, currency } }
+ */
 export async function getBudgets() {
     try {
-        const data = await AsyncStorage.getItem(BUDGETS_KEY);
-        return data ? JSON.parse(data) : {};
+        const list = await budgetService.getAll();
+        return list.reduce((acc, b) => {
+            acc[b.category] = { id: b.id, limit: parseFloat(b.monthlyLimit), currency: b.currency };
+            return acc;
+        }, {});
     } catch (error) {
         console.error('Error loading budgets:', error);
         return {};
     }
 }
 
-export async function saveBudget(category, limit, currency) {
+/**
+ * Create or update a budget.
+ * Pass existingId to update an existing one, omit to create new.
+ */
+export async function saveBudget(category, limit, currency, existingId = null) {
     try {
-        const budgets = await getBudgets();
-        budgets[category] = { limit, currency };
-        await AsyncStorage.setItem(BUDGETS_KEY, JSON.stringify(budgets));
+        if (existingId) {
+            await budgetService.update(existingId, category, limit, currency);
+        } else {
+            await budgetService.create(category, limit, currency);
+        }
         return true;
     } catch (error) {
         console.error('Error saving budget:', error);
@@ -24,11 +35,12 @@ export async function saveBudget(category, limit, currency) {
     }
 }
 
-export async function deleteBudget(category) {
+/**
+ * Delete a budget by its server-side id.
+ */
+export async function deleteBudget(id) {
     try {
-        const budgets = await getBudgets();
-        delete budgets[category];
-        await AsyncStorage.setItem(BUDGETS_KEY, JSON.stringify(budgets));
+        await budgetService.delete(id);
         return true;
     } catch (error) {
         console.error('Error deleting budget:', error);

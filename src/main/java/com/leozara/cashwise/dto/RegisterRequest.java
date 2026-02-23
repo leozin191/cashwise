@@ -24,4 +24,9 @@ public class RegisterRequest {
     @NotBlank
     @Size(max = 100)
     private String name;
+
+    @NotBlank
+    @Size(min = 3, max = 30)
+    @Pattern(regexp = "^[a-z0-9_]+$", message = "Username must be lowercase alphanumeric and underscores only")
+    private String username;
 }

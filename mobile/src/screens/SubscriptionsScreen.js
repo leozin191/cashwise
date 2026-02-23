@@ -19,20 +19,21 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { spacing } from '../constants/theme';
 import { createStyles } from './subscriptionsStyles';
-import { normalizeCategory } from '../constants/categories';
+import { normalizeCategory, CATEGORIES } from '../constants/categories';
 import CategoryIcon from '../components/CategoryIcon';
 import { subscriptionService, expenseService } from '../services/api';
+import * as Haptics from 'expo-haptics';
 import FadeIn from '../components/FadeIn';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import ConfirmSheet from '../components/ConfirmSheet';
 
-const FREQUENCIES = ['MONTHLY', 'WEEKLY', 'YEARLY'];
+const FREQUENCIES = ['MONTHLY', 'YEARLY'];
 
 export default function SubscriptionsScreen() {
     const { colors } = useTheme();
     const { t, language } = useLanguage();
     const { currency, getCurrencyInfo } = useCurrency();
-    const { showSuccess } = useSnackbar();
+    const { showSuccess, showError } = useSnackbar();
 
     const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -75,7 +76,6 @@ export default function SubscriptionsScreen() {
             .filter(s => s.active)
             .reduce((sum, s) => {
                 let monthly = parseFloat(s.amount);
-                if (s.frequency === 'WEEKLY') monthly *= 4.33;
                 if (s.frequency === 'YEARLY') monthly /= 12;
                 return sum + monthly;
             }, 0);
@@ -88,7 +88,7 @@ export default function SubscriptionsScreen() {
     };
 
     const getFrequencyLabel = (freq) => {
-        const map = { MONTHLY: t('monthly'), WEEKLY: t('weekly'), YEARLY: t('yearly') };
+        const map = { MONTHLY: t('monthly'), YEARLY: t('yearly') };
         return map[freq] || freq;
     };
 
@@ -172,16 +172,17 @@ export default function SubscriptionsScreen() {
             setShowModal(false);
             await loadSubscriptions();
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotSave'));
+            showError(t('couldNotSave'));
         }
     };
 
     const handleToggle = async (sub) => {
         try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             await subscriptionService.toggle(sub.id);
             await loadSubscriptions();
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotSave'));
+            showError(t('couldNotSave'));
         }
     };
 
@@ -199,7 +200,7 @@ export default function SubscriptionsScreen() {
                     showSuccess(t('subscriptionDeleted'));
                     await loadSubscriptions();
                 } catch (error) {
-                    Alert.alert(t('error'), t('couldNotDelete'));
+                    showError(t('couldNotDelete'));
                 }
             },
             secondaryLabel: t('cancel'),
@@ -356,19 +357,19 @@ export default function SubscriptionsScreen() {
                             <Text style={styles.label}>{t('dayOfMonth')}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="1-28"
+                                placeholder="1-31"
                                 placeholderTextColor={colors.textLighter}
                                 value={dayOfMonth}
                                 onChangeText={(v) => {
                                     const num = parseInt(v);
-                                    if (!v || (num >= 1 && num <= 28)) setDayOfMonth(v);
+                                    if (!v || (num >= 1 && num <= 31)) setDayOfMonth(v);
                                 }}
                                 keyboardType="number-pad"
                             />
 
                             <Text style={styles.label}>{t('category')}</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
-                                {['Entertainment', 'Services', 'Health', 'Transport', 'Food', 'Utilities', 'Insurance', 'General'].map((cat) => (
+                                {CATEGORIES.map((cat) => (
                                     <TouchableOpacity
                                         key={cat}
                                         style={[styles.catChip, selectedCategory === cat && styles.catChipActive]}

@@ -1,7 +1,9 @@
 package com.leozara.cashwise.controller;
 
-import com.leozara.cashwise.model.Expense;
-import com.leozara.cashwise.model.Subscription;
+import com.leozara.cashwise.dto.ExpenseResponse;
+import com.leozara.cashwise.dto.SubscriptionCreateRequest;
+import com.leozara.cashwise.dto.SubscriptionResponse;
+import com.leozara.cashwise.dto.SubscriptionUpdateRequest;
 import com.leozara.cashwise.security.AuthUtil;
 import com.leozara.cashwise.service.SubscriptionService;
 import jakarta.validation.Valid;
@@ -34,33 +36,32 @@ public class SubscriptionController {
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<Subscription>> getActive() {
+    public ResponseEntity<List<SubscriptionResponse>> getActive() {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(subscriptionService.getActiveSubscriptions(userId));
     }
 
     @PostMapping
-    public ResponseEntity<Subscription> create(@Valid @RequestBody Subscription subscription) {
+    public ResponseEntity<SubscriptionResponse> create(@Valid @RequestBody SubscriptionCreateRequest subscription) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(subscriptionService.createSubscription(subscription, userId));
     }
 
     @PostMapping("/bulk")
-    public ResponseEntity<List<Subscription>> createMultiple(@Valid @RequestBody List<Subscription> subscriptions) {
+    public ResponseEntity<List<SubscriptionResponse>> createMultiple(
+            @RequestBody List<@Valid SubscriptionCreateRequest> subscriptions) {
         if (subscriptions == null || subscriptions.isEmpty()) {
             throw new IllegalArgumentException("Subscription list cannot be null or empty.");
         }
         Long userId = AuthUtil.getCurrentUserId();
-        List<Subscription> savedSubscriptions = subscriptions.stream()
-                .map(sub -> subscriptionService.createSubscription(sub, userId))
-                .toList();
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedSubscriptions);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(subscriptionService.createSubscriptions(subscriptions, userId));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Subscription> update(@PathVariable Long id,
-                                               @Valid @RequestBody Subscription details) {
+    public ResponseEntity<SubscriptionResponse> update(@PathVariable Long id,
+                                                       @Valid @RequestBody SubscriptionUpdateRequest details) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(subscriptionService.updateSubscription(id, details, userId));
     }
@@ -73,13 +74,13 @@ public class SubscriptionController {
     }
 
     @PatchMapping("/{id}/toggle")
-    public ResponseEntity<Subscription> toggle(@PathVariable Long id) {
+    public ResponseEntity<SubscriptionResponse> toggle(@PathVariable Long id) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(subscriptionService.toggleActive(id, userId));
     }
 
     @PostMapping("/process")
-    public ResponseEntity<List<Expense>> processNow() {
+    public ResponseEntity<List<ExpenseResponse>> processNow() {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(subscriptionService.processSubscriptions(userId));
     }

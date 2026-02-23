@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
-export default function LoginPage({ onSwitch }) {
+export default function LoginPage({ onSwitch, onForgot }) {
     const { login } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -55,7 +55,14 @@ export default function LoginPage({ onSwitch }) {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-ink mb-1.5">Password</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-sm font-medium text-ink">Password</label>
+                            {onForgot && (
+                                <button type="button" onClick={onForgot} className="text-xs text-primary font-medium hover:underline cursor-pointer bg-transparent border-none">
+                                    Forgot password?
+                                </button>
+                            )}
+                        </div>
                         <input
                             type="password"
                             value={password}

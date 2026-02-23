@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { DeviceEventEmitter, Easing } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, DeviceEventEmitter, TouchableOpacity } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +13,7 @@ import SplashScreen from './src/components/SplashScreen';
 import OnboardingScreen from './src/components/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { CurrencyProvider } from './src/contexts/CurrencyContext';
@@ -26,6 +27,9 @@ import ReportSettingsScreen from './src/screens/ReportSettingsScreen';
 import EditProfileScreen from './src/screens/EditProfileScreen';
 import { fontFamily } from './src/constants/theme';
 import IncomesScreen from './src/screens/IncomesScreen';
+import AIChatScreen from './src/screens/AIChatScreen';
+import FamilyScreen from './src/screens/FamilyScreen';
+import ChooseUsernameScreen from './src/screens/ChooseUsernameScreen';
 import QuickAddFab from './src/components/QuickAddFab';
 import ApiEventsBridge from './src/components/ApiEventsBridge';
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -43,6 +47,24 @@ const TAB_ICONS = {
     Subscriptions: { focused: 'repeat', unfocused: 'repeat-outline' },
 };
 
+function AnimatedTabButton({ children, onPress, onLongPress, style }) {
+    const scale = useRef(new Animated.Value(1)).current;
+    const handlePress = () => {
+        Animated.sequence([
+            Animated.timing(scale, { toValue: 0.82, duration: 90, useNativeDriver: true }),
+            Animated.spring(scale, { toValue: 1, damping: 10, stiffness: 180, mass: 0.5, useNativeDriver: true }),
+        ]).start();
+        onPress?.();
+    };
+    return (
+        <Animated.View style={[style, { transform: [{ scale }] }]}>
+            <TouchableOpacity onPress={handlePress} onLongPress={onLongPress} activeOpacity={1} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                {children}
+            </TouchableOpacity>
+        </Animated.View>
+    );
+}
+
 function MainTabs() {
     const { colors } = useTheme();
     const { t } = useLanguage();
@@ -51,20 +73,14 @@ function MainTabs() {
         <Tab.Navigator
             id="main-tabs"
             screenOptions={({ route }) => ({
-                animation: 'fade',
-                transitionSpec: {
-                    animation: 'timing',
-                    config: {
-                        duration: 200,
-                        easing: Easing.out(Easing.ease),
-                    },
-                },
+                animation: 'shift',
                 lazy: false,
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textLight,
                 tabBarActiveBackgroundColor: colors.primaryBg,
                 headerShown: false,
                 tabBarHideOnKeyboard: true,
+                tabBarButton: (props) => <AnimatedTabButton {...props} />,
                 sceneStyle: {
                     backgroundColor: colors.background,
                 },
@@ -112,57 +128,12 @@ function MainTabs() {
                 component={SubscriptionsScreen}
                 options={{ tabBarLabel: t('subscriptions'), tabBarAccessibilityLabel: t('subscriptions') }}
             />
-            <Tab.Screen
-                name="Settings"
-                component={SettingsScreen}
-                options={{
-                    tabBarLabel: t('settings'),
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
-            <Tab.Screen
-                name="MonthlyReport"
-                component={MonthlyReportScreen}
-                options={{
-                    tabBarLabel: t('monthlyReport'),
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
-            <Tab.Screen
-                name="DataSettings"
-                component={DataSettingsScreen}
-                options={{
-                    tabBarLabel: t('data'),
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
-            <Tab.Screen
-                name="ReportSettings"
-                component={ReportSettingsScreen}
-                options={{
-                    tabBarLabel: t('report'),
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
-            <Tab.Screen
-                name="EditProfile"
-                component={EditProfileScreen}
-                options={{
-                    tabBarLabel: t('editProfile'),
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
-                }}
-            />
         </Tab.Navigator>
     );
 }
 
 function AppNavigator() {
-    const { token, isLoading, logout } = useAuth();
+    const { token, user, isLoading, logout } = useAuth();
     const { colors } = useTheme();
     const [currentRouteName, setCurrentRouteName] = useState(null);
 
@@ -191,6 +162,11 @@ function AppNavigator() {
         return null;
     }
 
+    // Logged in but no username yet → force username setup before entering app
+    if (token && !user?.username) {
+        return <ChooseUsernameScreen />;
+    }
+
     return (
         <NavigationContainer
             ref={navigationRef}
@@ -200,7 +176,23 @@ function AppNavigator() {
         >
             {token ? (
                 <>
-                    <MainTabs />
+                    <Stack.Navigator
+                        id="main-stack"
+                        screenOptions={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                            animationDuration: 220,
+                        }}
+                    >
+                        <Stack.Screen name="MainTabs" component={MainTabs} />
+                        <Stack.Screen name="Settings" component={SettingsScreen} />
+                        <Stack.Screen name="MonthlyReport" component={MonthlyReportScreen} />
+                        <Stack.Screen name="DataSettings" component={DataSettingsScreen} />
+                        <Stack.Screen name="ReportSettings" component={ReportSettingsScreen} />
+                        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                        <Stack.Screen name="AIChat" component={AIChatScreen} />
+                        <Stack.Screen name="Family" component={FamilyScreen} options={{ presentation: 'modal' }} />
+                    </Stack.Navigator>
                     {CORE_TAB_ROUTES.includes(currentRouteName) ? (
                         <QuickAddFab navigationRef={navigationRef} />
                     ) : null}
@@ -217,6 +209,7 @@ function AppNavigator() {
                 >
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="Register" component={RegisterScreen} />
+                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                 </Stack.Navigator>
             )}
         </NavigationContainer>

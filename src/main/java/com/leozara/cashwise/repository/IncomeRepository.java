@@ -30,4 +30,16 @@ public interface IncomeRepository extends JpaRepository<Income, Long> {
     @Modifying
     @Query("DELETE FROM Income i WHERE i.userId = :userId")
     void deleteByUserId(Long userId);
+
+    List<Income> findByHouseholdId(Long householdId);
+
+    Page<Income> findByHouseholdId(Long householdId, Pageable pageable);
+
+    Optional<Income> findByIdAndHouseholdId(Long id, Long householdId);
+
+    List<Income> findByDateBetweenAndHouseholdId(LocalDate startDate, LocalDate endDate, Long householdId);
+
+    List<Income> findByCurrencyAndHouseholdId(String currency, Long householdId);
+
+    List<Income> findByDateAndHouseholdId(LocalDate date, Long householdId);
 }

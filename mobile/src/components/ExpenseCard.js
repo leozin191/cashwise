@@ -2,19 +2,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { normalizeCategory } from '../constants/categories';
 import { formatDate } from '../utils/helpers';
-import { spacing, fontSize, fontFamily, borderRadius } from '../constants/theme';
+import { spacing, fontSize, fontFamily, borderRadius, shadows } from '../constants/theme';
 import CurrencyDisplay from './CurrencyDisplay';
 import { getCurrencyByCode } from '../constants/currencies';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import CategoryIcon from './CategoryIcon';
 
 export default function ExpenseCard({ expense }) {
     const { currency } = useCurrency();
     const { colors } = useTheme();
     const { language } = useLanguage();
+    const { user } = useAuth();
     const styles = createStyles(colors);
+
+    const isOtherMember = expense.addedByUsername && expense.addedByUsername !== user?.username;
 
     const installmentMatch = expense.description?.match(/\((\d+)\/(\d+)\)$/);
     const isInstallment = !!installmentMatch;
@@ -39,6 +43,16 @@ export default function ExpenseCard({ expense }) {
                     <Text style={styles.date}>
                         {formatDate(expense.date, language)}
                     </Text>
+                    {isOtherMember && (
+                        <View style={styles.addedByRow}>
+                            <View style={styles.addedByAvatar}>
+                                <Text style={styles.addedByAvatarText}>
+                                    {expense.addedByName?.charAt(0)?.toUpperCase() || '?'}
+                                </Text>
+                            </View>
+                            <Text style={styles.addedByText}>@{expense.addedByUsername}</Text>
+                        </View>
+                    )}
                     {isInstallment && (
                         <View style={styles.installmentBadge}>
                             <Ionicons name="card-outline" size={10} color={colors.primary} />
@@ -69,11 +83,13 @@ const createStyles = (colors) => StyleSheet.create({
     card: {
         backgroundColor: colors.surface,
         padding: spacing.lg,
-        marginVertical: spacing.md - 2,
+        marginVertical: spacing.xs,
+        marginHorizontal: spacing.xl,
         borderRadius: 12,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        ...shadows.small,
     },
     left: {
         flexDirection: 'row',
@@ -135,5 +151,29 @@ const createStyles = (colors) => StyleSheet.create({
         fontSize: fontSize.xs,
         fontFamily: fontFamily.semibold,
         color: colors.primary,
+    },
+    addedByRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: spacing.xs,
+        gap: 4,
+    },
+    addedByAvatar: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    addedByAvatarText: {
+        fontSize: 9,
+        fontFamily: fontFamily.bold,
+        color: colors.textWhite,
+    },
+    addedByText: {
+        fontSize: fontSize.xs,
+        fontFamily: fontFamily.regular,
+        color: colors.textLight,
     },
 });

@@ -51,7 +51,6 @@ const calculateForecastForMonths = (months, expensesList, subscriptionsList) => 
 
     activeSubscriptions.forEach((sub) => {
         let monthly = Number(sub.amount) || 0;
-        if (sub.frequency === 'WEEKLY') monthly *= 4.33;
         if (sub.frequency === 'YEARLY') monthly /= 12;
         subscriptionsTotal += monthly;
     });
@@ -140,14 +139,13 @@ const forecastExpenses = [
 ];
 const forecastSubscriptions = [
     { amount: 50, frequency: 'MONTHLY', active: true },
-    { amount: 10, frequency: 'WEEKLY', active: true },
     { amount: 120, frequency: 'YEARLY', active: true },
 ];
 const forecast = calculateForecastForMonths(forecastMonths, forecastExpenses, forecastSubscriptions);
-approxEqual(forecast[0].subscriptionsTotal, 103.3);
+approxEqual(forecast[0].subscriptionsTotal, 60);
 approxEqual(forecast[0].installmentsTotal, 300);
-approxEqual(forecast[0].combinedTotal, 403.3);
-approxEqual(forecast[1].combinedTotal, 403.3);
-approxEqual(forecast[2].combinedTotal, 403.3);
+approxEqual(forecast[0].combinedTotal, 360);
+approxEqual(forecast[1].combinedTotal, 360);
+approxEqual(forecast[2].combinedTotal, 360);
 
 console.log('OK: monthly totals, conversion logic, and grouping match expectations.');

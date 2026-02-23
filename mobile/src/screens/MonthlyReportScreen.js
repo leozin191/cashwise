@@ -16,8 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import { expenseService, incomeService, subscriptionService } from '../services/api';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { expenseService, incomeService, subscriptionService, aiService } from '../services/api';
 import currencyService from '../services/currency';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -73,7 +73,6 @@ const filterByMonthKey = (items, monthKey) => {
 
 export default function MonthlyReportScreen() {
     const navigation = useNavigation();
-    const route = useRoute();
     const { t, language } = useLanguage();
     const { colors } = useTheme();
     const { currency, getCurrencyInfo } = useCurrency();
@@ -106,8 +105,8 @@ export default function MonthlyReportScreen() {
     const [exportingHTML, setExportingHTML] = useState(false);
     const [reportSubscriptions, setReportSubscriptions] = useState([]);
     const [reportBudgets, setReportBudgets] = useState({});
-
-    const returnToScreen = route.params?.returnTo || 'Home';
+    const [aiSummary, setAiSummary] = useState('');
+    const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
 
     const monthOptions = useMemo(() => getMonthOptions(12, language), [language]);
     const selectedMonthLabel = useMemo(() => {
@@ -134,6 +133,7 @@ export default function MonthlyReportScreen() {
         setMonthExpenseSort('newest');
         setMonthIncomeQuery('');
         setMonthIncomeSort('newest');
+        setAiSummary('');
     }, [selectedMonthKey]);
 
     const convertToEUR = async (items) => {
@@ -558,6 +558,36 @@ export default function MonthlyReportScreen() {
         return sortByNewest(list);
     }, [currentMonthIncomes, monthIncomeQuery, monthIncomeSort, language, t]);
 
+    const handleAiSummary = async () => {
+        setAiSummaryLoading(true);
+        try {
+            const categoryTotals = {};
+            currentMonthExpenses.forEach((exp) => {
+                const cat = exp.category || 'Other';
+                categoryTotals[cat] = (categoryTotals[cat] || 0) + 1;
+            });
+            const topCat = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a)[0]?.[0];
+
+            const lines = [
+                `Analyze my finances for ${selectedMonthLabel} and give a short, friendly summary:`,
+                `- Total expenses: €${summary.expensesEUR.toFixed(2)}`,
+                `- Total income: €${summary.incomeEUR.toFixed(2)}`,
+                `- Balance: €${summary.balanceEUR.toFixed(2)}`,
+                `- Transactions: ${currentMonthExpenses.length}`,
+                topCat ? `- Top spending category: ${topCat}` : null,
+                ``,
+                `Reply with 3 short points: 1) What went well  2) What to improve  3) One specific actionable tip for next month.`,
+            ].filter(Boolean);
+
+            const { answer } = await aiService.chat(lines.join('\n'));
+            setAiSummary(answer);
+        } catch {
+            setAiSummary(t('aiChatError') || 'Could not generate summary. Please try again.');
+        } finally {
+            setAiSummaryLoading(false);
+        }
+    };
+
     const styles = createStyles(colors);
 
     const renderMonthSelector = (containerStyle) => {
@@ -608,7 +638,7 @@ export default function MonthlyReportScreen() {
                 <View style={styles.headerTopRow}>
                     <TouchableOpacity
                         style={styles.headerBack}
-                        onPress={() => navigation.navigate(returnToScreen)}
+                        onPress={() => navigation.goBack()}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="arrow-back" size={18} color={colors.textWhite} />
@@ -629,38 +659,29 @@ export default function MonthlyReportScreen() {
                 {renderMonthSelector()}
                 <View style={styles.exportRow}>
                     <TouchableOpacity
-                        style={[styles.exportButton, exportingCSV && styles.exportButtonDisabled]}
-                        onPress={handleExportMonthlyCSV}
+                        style={[styles.exportButton, (exportingCSV || exportingPDF || exportingHTML) && styles.exportButtonDisabled]}
+                        onPress={() => {
+                            Alert.alert(
+                                t('exportReport') || 'Export Report',
+                                t('chooseExportFormat') || 'Choose a format',
+                                [
+                                    { text: t('exportMonthlyCSV') || 'CSV', onPress: handleExportMonthlyCSV },
+                                    { text: t('exportMonthlyPDF') || 'PDF', onPress: handleExportMonthlyPDF },
+                                    { text: t('exportMonthlyHTML') || 'HTML', onPress: handleExportMonthlyHTML },
+                                    { text: t('cancel') || 'Cancel', style: 'cancel' },
+                                ]
+                            );
+                        }}
                         activeOpacity={0.85}
-                        disabled={exportingCSV}
+                        disabled={exportingCSV || exportingPDF || exportingHTML}
                     >
-                        <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+                        {(exportingCSV || exportingPDF || exportingHTML) ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <Ionicons name="share-outline" size={16} color={colors.primary} />
+                        )}
                         <Text style={styles.exportButtonText}>
-                            {exportingCSV ? t('exporting') : t('exportMonthlyCSV')}
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.exportButton, exportingPDF && styles.exportButtonDisabled]}
-                        onPress={handleExportMonthlyPDF}
-                        activeOpacity={0.85}
-                        disabled={exportingPDF}
-                    >
-                        <Ionicons name="print-outline" size={16} color={colors.primary} />
-                        <Text style={styles.exportButtonText}>
-                            {exportingPDF ? t('exporting') : t('exportMonthlyPDF')}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.exportRow}>
-                    <TouchableOpacity
-                        style={[styles.exportButton, exportingHTML && styles.exportButtonDisabled]}
-                        onPress={handleExportMonthlyHTML}
-                        activeOpacity={0.85}
-                        disabled={exportingHTML}
-                    >
-                        <Ionicons name="code-slash-outline" size={16} color={colors.primary} />
-                        <Text style={styles.exportButtonText}>
-                            {exportingHTML ? t('exporting') : t('exportMonthlyHTML')}
+                            {(exportingCSV || exportingPDF || exportingHTML) ? t('exporting') : (t('exportReport') || 'Export')}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -711,6 +732,45 @@ export default function MonthlyReportScreen() {
                             );
                         })}
                     </View>
+                </View>
+
+                {/* AI Summary Card */}
+                <View style={styles.aiSummaryCard}>
+                    <View style={styles.aiSummaryHeader}>
+                        <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+                        <Text style={styles.aiSummaryTitle}>{t('aiMonthSummary') || 'AI Monthly Summary'}</Text>
+                    </View>
+                    {aiSummary ? (
+                        <>
+                            <Text style={styles.aiSummaryText}>{aiSummary}</Text>
+                            <TouchableOpacity
+                                style={styles.aiRegenerateBtn}
+                                onPress={handleAiSummary}
+                                disabled={aiSummaryLoading}
+                                activeOpacity={0.7}
+                            >
+                                {aiSummaryLoading
+                                    ? <ActivityIndicator size="small" color={colors.primary} />
+                                    : <>
+                                        <Ionicons name="refresh-outline" size={14} color={colors.primary} />
+                                        <Text style={styles.aiRegenerateBtnText}>{t('regenerate') || 'Regenerate'}</Text>
+                                    </>
+                                }
+                            </TouchableOpacity>
+                        </>
+                    ) : (
+                        <TouchableOpacity
+                            style={[styles.aiSummaryButton, aiSummaryLoading && styles.aiSummaryButtonDisabled]}
+                            onPress={handleAiSummary}
+                            disabled={aiSummaryLoading}
+                            activeOpacity={0.8}
+                        >
+                            {aiSummaryLoading
+                                ? <ActivityIndicator size="small" color={colors.textWhite} />
+                                : <Text style={styles.aiSummaryButtonText}>{t('generateSummary') || 'Generate summary'}</Text>
+                            }
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <MonthlyChart
@@ -1273,5 +1333,64 @@ const createStyles = (colors) =>
             fontFamily: fontFamily.medium,
             color: colors.textLight,
             marginTop: spacing.sm,
+        },
+        aiSummaryCard: {
+            backgroundColor: colors.surface,
+            marginHorizontal: spacing.xl,
+            marginBottom: spacing.lg,
+            padding: spacing.lg,
+            borderRadius: borderRadius.lg,
+            borderWidth: 1,
+            borderColor: colors.primary + '30',
+            ...shadows.small,
+        },
+        aiSummaryHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            marginBottom: spacing.md,
+        },
+        aiSummaryTitle: {
+            fontSize: fontSize.base,
+            fontFamily: fontFamily.semibold,
+            color: colors.text,
+        },
+        aiSummaryText: {
+            fontSize: fontSize.sm,
+            fontFamily: fontFamily.regular,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        aiSummaryButton: {
+            backgroundColor: colors.primary,
+            borderRadius: borderRadius.full,
+            paddingVertical: spacing.sm,
+            alignItems: 'center',
+        },
+        aiSummaryButtonDisabled: {
+            opacity: 0.6,
+        },
+        aiSummaryButtonText: {
+            color: colors.textWhite,
+            fontFamily: fontFamily.semibold,
+            fontSize: fontSize.sm,
+        },
+        aiRegenerateBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            alignSelf: 'flex-end',
+            gap: spacing.xs,
+            marginTop: spacing.md,
+            paddingVertical: spacing.xs,
+            paddingHorizontal: spacing.sm,
+            borderRadius: borderRadius.full,
+            borderWidth: 1,
+            borderColor: colors.primary + '40',
+            backgroundColor: colors.primaryBg,
+        },
+        aiRegenerateBtnText: {
+            fontSize: fontSize.xs,
+            fontFamily: fontFamily.medium,
+            color: colors.primary,
         },
     });

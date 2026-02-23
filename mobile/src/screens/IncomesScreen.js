@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { incomeService } from '../services/api';
+import * as Haptics from 'expo-haptics';
+import SwipeableRow from '../components/SwipeableRow';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { spacing, borderRadius, fontSize, fontFamily, shadows } from '../constants/theme';
@@ -22,11 +24,13 @@ import IncomeCard from '../components/IncomeCard';
 import AddIncomeModal from '../components/AddIncomeModal';
 import IncomeDetailModal from '../components/IncomeDetailModal';
 import { addDataChangedListener } from '../services/dataEvents';
+import { useSnackbar } from '../contexts/SnackbarContext';
 
 export default function IncomesScreen() {
     const navigation = useNavigation();
     const { colors } = useTheme();
     const { t } = useLanguage();
+    const { showError } = useSnackbar();
 
     const [incomes, setIncomes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -45,7 +49,7 @@ export default function IncomesScreen() {
             const data = await incomeService.getAll();
             setIncomes(Array.isArray(data) ? data : []);
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotLoad'));
+            showError(t('couldNotLoad'));
         } finally {
             if (!silent) setLoading(false);
             setRefreshing(false);
@@ -101,14 +105,20 @@ export default function IncomesScreen() {
                 style: 'destructive',
                 onPress: async () => {
                     try {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                         await incomeService.delete(income.id);
                         await loadIncomes({ silent: true });
                     } catch (error) {
-                        Alert.alert(t('error'), t('couldNotDelete'));
+                        showError(t('couldNotDelete'));
                     }
                 },
             },
         ]);
+    };
+
+    const handleSwipeDelete = (income) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        handleDelete(income);
     };
 
     const periodOptions = [
@@ -199,17 +209,24 @@ export default function IncomesScreen() {
 
                 {filteredIncomes.length === 0 ? (
                     <View style={styles.emptyState}>
-                        <Ionicons name="cash-outline" size={56} color={colors.textLight} />
+                        <View style={styles.emptyIconWrap}>
+                            <Ionicons name="cash-outline" size={40} color={colors.success} />
+                        </View>
                         <Text style={styles.emptyText}>{t('noIncomes')}</Text>
                         <Text style={styles.emptySubtext}>{t('noIncomesSubtext')}</Text>
+                        <TouchableOpacity style={styles.emptyAction} onPress={() => setShowAdd(true)} activeOpacity={0.8}>
+                            <Ionicons name="add" size={16} color={colors.textWhite} />
+                            <Text style={styles.emptyActionText}>{t('addIncome')}</Text>
+                        </TouchableOpacity>
                     </View>
                 ) : (
                     filteredIncomes.map((income) => (
-                        <IncomeCard
-                            key={income.id}
-                            income={income}
-                            onPress={() => setDetailIncome(income)}
-                        />
+                        <SwipeableRow key={income.id} onDelete={() => handleSwipeDelete(income)} colors={colors}>
+                            <IncomeCard
+                                income={income}
+                                onPress={() => setDetailIncome(income)}
+                            />
+                        </SwipeableRow>
                     ))
                 )}
 
@@ -322,7 +339,27 @@ const createStyles = (colors) =>
             marginBottom: spacing.lg,
         },
         addButtonText: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.primary },
-        emptyState: { alignItems: 'center', paddingVertical: spacing.xxxl },
-        emptyText: { fontSize: fontSize.lg, fontFamily: fontFamily.bold, color: colors.text, marginTop: spacing.md },
-        emptySubtext: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, marginTop: spacing.xs },
+        emptyState: { alignItems: 'center', paddingVertical: spacing.xxxl, paddingHorizontal: spacing.xl },
+        emptyIconWrap: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: colors.successBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: spacing.md,
+        },
+        emptyText: { fontSize: fontSize.lg, fontFamily: fontFamily.bold, color: colors.text, marginTop: spacing.sm },
+        emptySubtext: { fontSize: fontSize.sm, fontFamily: fontFamily.regular, color: colors.textLight, marginTop: spacing.xs, textAlign: 'center' },
+        emptyAction: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.xs,
+            backgroundColor: colors.success,
+            borderRadius: borderRadius.full,
+            paddingHorizontal: spacing.xl,
+            paddingVertical: spacing.md,
+            marginTop: spacing.xl,
+        },
+        emptyActionText: { fontSize: fontSize.base, fontFamily: fontFamily.semibold, color: colors.textWhite },
     });

@@ -35,6 +35,7 @@ export default function EditProfileScreen() {
     const [savingPassword, setSavingPassword] = useState(false);
 
     const [deleting, setDeleting] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
 
     const handleSaveProfile = async () => {
         if (!name.trim()) {
@@ -113,9 +114,13 @@ export default function EditProfileScreen() {
     };
 
     const performDelete = async () => {
+        if (!deletePassword) {
+            showError(t('enterPasswordToConfirm') || 'Enter your password to confirm');
+            return;
+        }
         setDeleting(true);
         try {
-            await deleteAccount();
+            await deleteAccount(deletePassword);
         } catch (error) {
             showError(error?.response?.data?.message || t('error'));
             setDeleting(false);
@@ -248,6 +253,16 @@ export default function EditProfileScreen() {
                         <Ionicons name="warning-outline" size={18} color={colors.error} style={{ marginRight: spacing.sm }} />
                         <Text style={[styles.sectionTitle, { color: colors.error }]}>{t('deleteAccount')}</Text>
                     </View>
+
+                    <TextInput
+                        style={[styles.input, { borderColor: colors.error + '60', marginBottom: spacing.md }]}
+                        placeholder={t('enterPasswordToConfirm') || 'Enter password to confirm'}
+                        placeholderTextColor={colors.textLight}
+                        secureTextEntry
+                        value={deletePassword}
+                        onChangeText={setDeletePassword}
+                        autoCapitalize="none"
+                    />
 
                     <TouchableOpacity
                         style={[styles.deleteButton, deleting && styles.buttonDisabled]}

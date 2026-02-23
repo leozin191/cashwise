@@ -1,6 +1,7 @@
 ﻿import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import currencyService from './currency';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api';
 const EXPENSES_URL = BASE_URL.endsWith('/api') ? `${BASE_URL}/expenses` : BASE_URL;
@@ -96,8 +97,8 @@ export const authService = {
         return response.data;
     },
 
-    register: async (name, email, password) => {
-        const response = await axios.post(`${AUTH_URL}/register`, { name, email, password }, { timeout: 15000 });
+    register: async (name, email, password, username) => {
+        const response = await axios.post(`${AUTH_URL}/register`, { name, email, password, username }, { timeout: 15000 });
         return response.data;
     },
 
@@ -115,8 +116,78 @@ export const authService = {
         await api.put(`${AUTH_URL}/password`, { currentPassword, newPassword });
     },
 
-    deleteAccount: async () => {
-        await api.delete(`${AUTH_URL}/account`);
+    deleteAccount: async (password) => {
+        await api.delete(`${AUTH_URL}/account`, { data: { password } });
+    },
+
+    forgotPassword: async (email) => {
+        await axios.post(`${AUTH_URL}/forgot-password`, { email }, { timeout: 15000 });
+    },
+
+    resetPassword: async (token, newPassword) => {
+        await axios.post(`${AUTH_URL}/reset-password`, { token, newPassword }, { timeout: 15000 });
+    },
+
+    checkUsername: async (username) => {
+        const response = await api.get(`${AUTH_URL}/check-username/${encodeURIComponent(username)}`);
+        return response.data; // { available: boolean }
+    },
+
+    setUsername: async (username) => {
+        const response = await api.put(`${AUTH_URL}/username`, { username });
+        return response.data; // AuthResponse with new token
+    },
+};
+
+const AI_URL = BASE_URL.endsWith('/api') ? `${BASE_URL}/ai` : BASE_URL.replace('/expenses', '/ai');
+
+const getCurrencyContext = async () => {
+    try {
+        const [exchangeRates, storedCurrency] = await Promise.all([
+            currencyService.getRates(),
+            AsyncStorage.getItem('@currency'),
+        ]);
+        return { exchangeRates, userCurrency: storedCurrency || 'EUR' };
+    } catch {
+        return { exchangeRates: null, userCurrency: 'EUR' };
+    }
+};
+
+export const aiService = {
+    parseExpense: async (text) => {
+        const response = await api.post(`${AI_URL}/parse-expense`, { text }, { timeout: 20000 });
+        return response.data;
+    },
+    parseIncome: async (text) => {
+        const response = await api.post(`${AI_URL}/parse-income`, { text }, { timeout: 20000 });
+        return response.data;
+    },
+    chat: async (question, history = []) => {
+        const currencyCtx = await getCurrencyContext();
+        const response = await api.post(
+            `${AI_URL}/chat`,
+            { question, history, ...currencyCtx },
+            { timeout: 30000 }
+        );
+        return response.data;
+    },
+    scanReceipt: async (imageBase64, mimeType = 'image/jpeg') => {
+        const response = await api.post(`${AI_URL}/scan-receipt`, { imageBase64, mimeType }, { timeout: 30000 });
+        return response.data;
+    },
+    getInsights: async () => {
+        const currencyCtx = await getCurrencyContext();
+        const response = await api.post(`${AI_URL}/insights`, currencyCtx, { timeout: 30000 });
+        return response.data;
+    },
+    detectRecurring: async () => {
+        const response = await api.get(`${AI_URL}/detect-recurring`, { timeout: 20000 });
+        return response.data;
+    },
+    budgetAdvice: async () => {
+        const currencyCtx = await getCurrencyContext();
+        const response = await api.post(`${AI_URL}/budget-advice`, currencyCtx, { timeout: 30000 });
+        return response.data;
     },
 };
 
@@ -219,6 +290,11 @@ const getAllWithCache = async ({ url, cacheKeyName }) => {
 
 export const expenseService = {
     getAll: async () => getAllWithCache({ url: EXPENSES_URL, cacheKeyName: 'expenses' }),
+
+    suggestCategory: async (description) => {
+        const response = await api.get(`${EXPENSES_URL}/suggest-category`, { params: { description } });
+        return response.data;
+    },
 
     create: async (expense) => {
         try {
@@ -345,5 +421,75 @@ export const subscriptionService = {
             notifyError('networkError', error);
             throw error;
         }
+    },
+};
+
+const HOUSEHOLD_URL = BASE_URL.endsWith('/api') ? `${BASE_URL}/household` : `${BASE_URL}/household`;
+
+export const householdService = {
+    getMyHousehold: async () => {
+        const response = await requestWithRetry({ method: 'GET', url: HOUSEHOLD_URL });
+        return response.data;
+    },
+
+    createHousehold: async (name) => {
+        const response = await api.post(HOUSEHOLD_URL, { name });
+        return response.data;
+    },
+
+    renameHousehold: async (name) => {
+        await api.put(`${HOUSEHOLD_URL}/name`, { name });
+    },
+
+    inviteMember: async (emailOrUsername) => {
+        const isUsername = emailOrUsername.startsWith('@');
+        const payload = isUsername
+            ? { username: emailOrUsername.replace('@', '') }
+            : { email: emailOrUsername };
+        await api.post(`${HOUSEHOLD_URL}/invite`, payload);
+    },
+
+    getPendingInvitations: async () => {
+        const response = await api.get(`${HOUSEHOLD_URL}/invitations/pending`);
+        return response.data;
+    },
+
+    acceptInvitation: async (token) => {
+        await api.post(`${HOUSEHOLD_URL}/invitations/${token}/accept`);
+    },
+
+    declineInvitation: async (token) => {
+        await api.post(`${HOUSEHOLD_URL}/invitations/${token}/decline`);
+    },
+
+    removeMember: async (userId) => {
+        await api.delete(`${HOUSEHOLD_URL}/members/${userId}`);
+    },
+
+    leaveHousehold: async () => {
+        await api.delete(`${HOUSEHOLD_URL}/leave`);
+    },
+};
+
+const BUDGETS_URL = `${BASE_URL}/budgets`;
+
+export const budgetService = {
+    getAll: async () => {
+        const response = await api.get(BUDGETS_URL);
+        return response.data; // Array of { id, category, monthlyLimit, currency }
+    },
+
+    create: async (category, monthlyLimit, currency) => {
+        const response = await api.post(BUDGETS_URL, { category, monthlyLimit, currency });
+        return response.data;
+    },
+
+    update: async (id, category, monthlyLimit, currency) => {
+        const response = await api.put(`${BUDGETS_URL}/${id}`, { category, monthlyLimit, currency });
+        return response.data;
+    },
+
+    delete: async (id) => {
+        await api.delete(`${BUDGETS_URL}/${id}`);
     },
 };

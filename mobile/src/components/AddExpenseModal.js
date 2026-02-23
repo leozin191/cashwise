@@ -1,4 +1,4 @@
-﻿import {useEffect, useMemo, useRef, useState} from 'react';
+﻿import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -15,10 +15,13 @@ import {
     Dimensions,
     Keyboard,
     Switch,
+    ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { expenseService } from '../services/api';
+import { expenseService, aiService } from '../services/api';
+import * as Haptics from 'expo-haptics';
 import { CATEGORIES, getCategoryColor } from '../constants/categories';
 import { CURRENCIES } from '../constants/currencies';
 import { spacing, borderRadius, fontSize, fontWeight, fontFamily, shadows } from '../constants/theme';
@@ -47,7 +50,13 @@ export default function AddExpenseModal({
     const [description, setDescription] = useState(expenseToEdit?.description || '');
     const [amount, setAmount] = useState(expenseToEdit?.amount?.toString() || '');
     const [category, setCategory] = useState(expenseToEdit?.category || '');
+    const [suggestion, setSuggestion] = useState('');
     const [saving, setSaving] = useState(false);
+    const suggestionTimer = useRef(null);
+    const [showNlInput, setShowNlInput] = useState(false);
+    const [nlText, setNlText] = useState('');
+    const [nlLoading, setNlLoading] = useState(false);
+    const [scanLoading, setScanLoading] = useState(false);
     const [selectedCurrency, setSelectedCurrency] = useState(expenseToEdit?.currency || currency);
     const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -147,6 +156,82 @@ export default function AddExpenseModal({
         setIsInstallment(false);
         setInstallmentCount(2);
     }, [expenseToEdit, safeInstallmentGroup, prefillExpense, currency]);
+
+    const handleDescriptionChange = useCallback((text) => {
+        setDescription(text);
+        setSuggestion('');
+        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+        if (!category && text.trim().length >= 3) {
+            suggestionTimer.current = setTimeout(async () => {
+                try {
+                    const res = await expenseService.suggestCategory(text.trim());
+                    if (res?.suggestedCategory) setSuggestion(res.suggestedCategory);
+                } catch { /* ignore */ }
+            }, 600);
+        }
+    }, [category]);
+
+    const applySuggestion = useCallback(() => {
+        if (suggestion) {
+            setCategory(suggestion);
+            setSuggestion('');
+        }
+    }, [suggestion]);
+
+    const applyParsed = (parsed) => {
+        if (parsed.description) setDescription(parsed.description);
+        if (parsed.amount) setAmount(String(parsed.amount));
+        if (parsed.category) setCategory(parsed.category);
+        if (parsed.currency) setSelectedCurrency(parsed.currency);
+        if (parsed.date) {
+            const d = new Date(parsed.date);
+            if (!isNaN(d.getTime())) setSelectedDate(d);
+        }
+    };
+
+    const handleNlSubmit = useCallback(async () => {
+        if (!nlText.trim()) return;
+        setNlLoading(true);
+        try {
+            const parsed = await aiService.parseExpense(nlText.trim());
+            applyParsed(parsed);
+            setShowNlInput(false);
+            setNlText('');
+        } catch {
+            Alert.alert(t('error'), t('couldNotParseExpense') || 'Could not parse. Please fill in manually.');
+        } finally {
+            setNlLoading(false);
+        }
+    }, [nlText, t]);
+
+    const handleScanReceipt = useCallback(async () => {
+        try {
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!permission.granted) {
+                const galleryPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (!galleryPerm.granted) {
+                    Alert.alert(t('error'), 'Camera or gallery permission is required.');
+                    return;
+                }
+            }
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                base64: true,
+                quality: 0.6,
+            });
+            if (result.canceled || !result.assets?.[0]?.base64) return;
+
+            setScanLoading(true);
+            const asset = result.assets[0];
+            const mimeType = asset.mimeType || 'image/jpeg';
+            const parsed = await aiService.scanReceipt(asset.base64, mimeType);
+            applyParsed(parsed);
+        } catch {
+            Alert.alert(t('error'), t('couldNotScanReceipt') || 'Could not scan receipt. Please fill in manually.');
+        } finally {
+            setScanLoading(false);
+        }
+    }, [t]);
 
     const checkBudgetAlert = async (expense) => {
         try {
@@ -360,6 +445,7 @@ export default function AddExpenseModal({
                     ...(expenseToEdit?.groupId && { groupId: expenseToEdit.groupId }),
                 };
 
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 if (expenseToEdit) {
                     await expenseService.update(expenseToEdit.id, expenseData);
                     showSuccess(t('expenseUpdated'));
@@ -393,6 +479,8 @@ export default function AddExpenseModal({
         setDescription('');
         setAmount('');
         setCategory('');
+        setSuggestion('');
+        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
         setShowAdvanced(false);
         setShowCurrencyPicker(false);
         setSelectedDate(new Date());
@@ -446,12 +534,61 @@ export default function AddExpenseModal({
                     </View>
 
                     <ScrollView style={styles.content}>
-                        <View style={styles.aiBanner}>
-                            <Ionicons name="flash-outline" size={24} color={colors.primary} style={{ marginRight: spacing.md }} />
-                            <Text style={styles.aiBannerText}>
-                                {t('aiBanner')}
-                            </Text>
-                        </View>
+                        {/* AI action row */}
+                        {!showNlInput ? (
+                            <View style={styles.aiRow}>
+                                <TouchableOpacity
+                                    style={styles.aiButton}
+                                    onPress={() => setShowNlInput(true)}
+                                    activeOpacity={0.75}
+                                >
+                                    <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+                                    <Text style={styles.aiButtonText}>{t('smartInput') || 'Smart input'}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.aiButton, scanLoading && styles.aiButtonDisabled]}
+                                    onPress={handleScanReceipt}
+                                    disabled={scanLoading}
+                                    activeOpacity={0.75}
+                                >
+                                    {scanLoading
+                                        ? <ActivityIndicator size={14} color={colors.primary} />
+                                        : <Ionicons name="camera-outline" size={15} color={colors.primary} />
+                                    }
+                                    <Text style={styles.aiButtonText}>{t('scanReceipt') || 'Scan receipt'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={styles.nlInputContainer}>
+                                <TextInput
+                                    style={styles.nlInput}
+                                    placeholder={t('nlPlaceholder') || 'e.g. coffee 3.50 yesterday'}
+                                    placeholderTextColor={colors.textLighter}
+                                    value={nlText}
+                                    onChangeText={setNlText}
+                                    autoFocus
+                                    returnKeyType="go"
+                                    onSubmitEditing={handleNlSubmit}
+                                    maxLength={300}
+                                />
+                                <TouchableOpacity
+                                    style={[styles.nlGoButton, nlLoading && styles.aiButtonDisabled]}
+                                    onPress={handleNlSubmit}
+                                    disabled={nlLoading}
+                                >
+                                    {nlLoading
+                                        ? <ActivityIndicator size={14} color={colors.textWhite} />
+                                        : <Ionicons name="arrow-forward" size={16} color={colors.textWhite} />
+                                    }
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.nlCancelButton}
+                                    onPress={() => { setShowNlInput(false); setNlText(''); }}
+                                >
+                                    <Ionicons name="close" size={16} color={colors.textLight} />
+                                </TouchableOpacity>
+                            </View>
+                        )}
 
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>{t('description')}</Text>
@@ -460,10 +597,18 @@ export default function AddExpenseModal({
                                 placeholder={t('descriptionPlaceholder')}
                                 placeholderTextColor={colors.textLighter}
                                 value={description}
-                                onChangeText={setDescription}
+                                onChangeText={handleDescriptionChange}
                                 maxLength={200}
                                 autoFocus
                             />
+                            {suggestion ? (
+                                <TouchableOpacity onPress={applySuggestion} style={styles.suggestionChip}>
+                                    <Ionicons name="flash" size={13} color={colors.primary} style={{ marginRight: 4 }} />
+                                    <Text style={styles.suggestionText}>
+                                        {t(`categories.${suggestion}`)} — {t('tapToApply') || 'tap to apply'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : null}
                         </View>
 
                         <View style={styles.inputGroup}>
@@ -759,13 +904,80 @@ const createStyles = (colors) => StyleSheet.create({
     content: {
         padding: spacing.xl,
     },
-    aiBanner: {
+    suggestionChip: {
         flexDirection: 'row',
-        backgroundColor: colors.primaryBg,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        marginBottom: spacing.xxl,
         alignItems: 'center',
+        marginTop: spacing.sm,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.primaryBg,
+        alignSelf: 'flex-start',
+    },
+    suggestionText: {
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.medium,
+        color: colors.primary,
+    },
+    aiRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginBottom: spacing.lg,
+    },
+    aiButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xs,
+        backgroundColor: colors.primaryBg,
+        borderRadius: borderRadius.lg,
+        paddingVertical: spacing.sm + 2,
+        paddingHorizontal: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.primary + '30',
+    },
+    aiButtonDisabled: { opacity: 0.5 },
+    aiButtonText: {
+        fontSize: fontSize.xs + 1,
+        fontFamily: fontFamily.semibold,
+        color: colors.primary,
+    },
+    nlInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+        gap: spacing.sm,
+    },
+    nlInput: {
+        flex: 1,
+        backgroundColor: colors.background,
+        borderRadius: borderRadius.md,
+        borderWidth: 1.5,
+        borderColor: colors.primary,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm + 2,
+        fontSize: fontSize.sm,
+        fontFamily: fontFamily.regular,
+        color: colors.text,
+    },
+    nlGoButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    nlCancelButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     aiBannerText: {
         flex: 1,

@@ -1,16 +1,23 @@
 package com.leozara.cashwise.controller;
 
 import com.leozara.cashwise.dto.CategorySuggestionResponse;
-import com.leozara.cashwise.model.Expense;
+import com.leozara.cashwise.dto.ExpenseCreateRequest;
+import com.leozara.cashwise.dto.ExpenseResponse;
+import com.leozara.cashwise.dto.ExpenseUpdateRequest;
+import com.leozara.cashwise.dto.SubscriptionCreateRequest;
 import com.leozara.cashwise.security.AuthUtil;
 import com.leozara.cashwise.service.AiService;
 import com.leozara.cashwise.service.ExpenseService;
+import com.leozara.cashwise.service.SubscriptionService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -19,10 +26,15 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/expenses")
 @RequiredArgsConstructor
+@Slf4j
+@Validated
 public class ExpenseController {
 
     private final ExpenseService expenseService;
+    private final SubscriptionService subscriptionService;
     private final AiService aiService;
+
+    private static final String SUBSCRIPTION_CATEGORY = "Subscriptions";
 
     @GetMapping
     public ResponseEntity<?> getAllExpenses(
@@ -30,32 +42,58 @@ public class ExpenseController {
             @RequestParam(required = false) Integer size) {
         Long userId = AuthUtil.getCurrentUserId();
         if (page != null && size != null) {
-            var pageable = PageRequest.of(page, Math.min(size, 200), Sort.by("date").descending());
+            var pageable = PageRequest.of(page, Math.min(size, 50), Sort.by("date").descending());
             return ResponseEntity.ok(expenseService.getAllExpenses(userId, pageable));
         }
         return ResponseEntity.ok(expenseService.getAllExpenses(userId));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Expense> getExpenseById(@PathVariable Long id) {
+    public ResponseEntity<ExpenseResponse> getExpenseById(@PathVariable Long id) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(expenseService.getExpenseById(id, userId));
     }
 
     @PostMapping
-    public ResponseEntity<Expense> createExpense(@Valid @RequestBody Expense expense) {
+    public ResponseEntity<ExpenseResponse> createExpense(@Valid @RequestBody ExpenseCreateRequest request) {
         Long userId = AuthUtil.getCurrentUserId();
-        Expense savedExpense = expenseService.createExpense(expense, userId);
+        ExpenseResponse savedExpense = expenseService.createExpense(request, userId);
+
+        boolean isSubscriptionCategory = SUBSCRIPTION_CATEGORY.equalsIgnoreCase(savedExpense.getCategory());
+        boolean hasFrequency = request.getFrequency() != null;
+
+        if (isSubscriptionCategory || hasFrequency) {
+            try {
+                String frequency = request.getFrequency() != null ? request.getFrequency() : "MONTHLY";
+                int dayOfMonth = request.getDayOfMonth() != null
+                        ? request.getDayOfMonth()
+                        : request.getDate().getDayOfMonth();
+
+                SubscriptionCreateRequest subRequest = new SubscriptionCreateRequest();
+                subRequest.setDescription(request.getDescription());
+                subRequest.setAmount(request.getAmount());
+                subRequest.setCurrency(request.getCurrency());
+                subRequest.setCategory(savedExpense.getCategory());
+                subRequest.setFrequency(frequency);
+                subRequest.setDayOfMonth(dayOfMonth);
+                subRequest.setActive(true);
+
+                subscriptionService.createSubscription(subRequest, userId);
+                log.info("Auto-created subscription from expense: {} ({})", request.getDescription(), frequency);
+            } catch (Exception e) {
+                log.warn("Failed to auto-create subscription from expense {}: {}", savedExpense.getId(), e.getMessage());
+            }
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(savedExpense);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Expense> updateExpense(
+    public ResponseEntity<ExpenseResponse> updateExpense(
             @PathVariable Long id,
-            @Valid @RequestBody Expense expenseDetails) {
+            @Valid @RequestBody ExpenseUpdateRequest expenseDetails) {
         Long userId = AuthUtil.getCurrentUserId();
-        Expense updatedExpense = expenseService.updateExpense(id, expenseDetails, userId);
-        return ResponseEntity.ok(updatedExpense);
+        return ResponseEntity.ok(expenseService.updateExpense(id, expenseDetails, userId));
     }
 
     @DeleteMapping("/{id}")
@@ -66,19 +104,19 @@ public class ExpenseController {
     }
 
     @GetMapping("/category/{category}")
-    public ResponseEntity<List<Expense>> getExpensesByCategory(@PathVariable String category) {
+    public ResponseEntity<List<ExpenseResponse>> getExpensesByCategory(@PathVariable String category) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(expenseService.getExpensesByCategory(category, userId));
     }
 
     @GetMapping("/currency/{currency}")
-    public ResponseEntity<List<Expense>> getExpensesByCurrency(@PathVariable String currency) {
+    public ResponseEntity<List<ExpenseResponse>> getExpensesByCurrency(@PathVariable String currency) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(expenseService.getExpensesByCurrency(currency, userId));
     }
 
     @GetMapping("/date-range")
-    public ResponseEntity<List<Expense>> getExpensesByDateRange(
+    public ResponseEntity<List<ExpenseResponse>> getExpensesByDateRange(
             @RequestParam LocalDate start,
             @RequestParam LocalDate end) {
         if (start.isAfter(end)) {
@@ -89,32 +127,26 @@ public class ExpenseController {
     }
 
     @GetMapping("/date/{date}")
-    public ResponseEntity<List<Expense>> getExpensesByDate(@PathVariable LocalDate date) {
+    public ResponseEntity<List<ExpenseResponse>> getExpensesByDate(@PathVariable LocalDate date) {
         Long userId = AuthUtil.getCurrentUserId();
         return ResponseEntity.ok(expenseService.getExpensesByDate(date, userId));
     }
 
     @PostMapping("/bulk")
-    public ResponseEntity<List<Expense>> createMultipleExpenses(@Valid @RequestBody List<Expense> expenses) {
-        if (expenses == null || expenses.isEmpty()) {
-            throw new IllegalArgumentException("Expense list cannot be null or empty.");
-        }
+    public ResponseEntity<List<ExpenseResponse>> createMultipleExpenses(
+            @RequestBody @Size(min = 1, max = 500, message = "Bulk import must contain between 1 and 500 items")
+            List<@Valid ExpenseCreateRequest> expenses) {
         Long userId = AuthUtil.getCurrentUserId();
-        List<Expense> savedExpenses = expenses.stream()
-                .map(expense -> expenseService.createExpense(expense, userId))
-                .toList();
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedExpenses);
+        return ResponseEntity.status(HttpStatus.CREATED).body(expenseService.createExpenses(expenses, userId));
     }
 
     @GetMapping("/suggest-category")
     public ResponseEntity<CategorySuggestionResponse> suggestCategory(
-            @RequestParam String description) {
-        if (description == null || description.trim().isEmpty()) {
+            @RequestParam @Size(min = 1, max = 200) String description) {
+        if (description.trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         String category = aiService.suggestCategory(description);
-        CategorySuggestionResponse response =
-                new CategorySuggestionResponse(description, category);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(new CategorySuggestionResponse(description, category));
     }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { expenseService, incomeService } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -24,12 +24,11 @@ export default function ReportsPage() {
     const toast = useToast();
 
     useEffect(() => {
-        setLoading(true);
         Promise.all([expenseService.getAll(), incomeService.getAll()])
             .then(([exp, inc]) => { setExpenses(exp); setIncomes(inc); })
             .catch(() => toast.error('Failed to load report data'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const filteredExpenses = useMemo(() =>
         expenses.filter((e) => (!dateFrom || e.date >= dateFrom) && (!dateTo || e.date <= dateTo)),
@@ -72,20 +71,86 @@ export default function ReportsPage() {
 
     const fmt = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(n);
 
+    const handleExportPdf = () => {
+        const rows = topExpenses.map((e) => `
+            <tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${e.date || ''}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${e.description || ''}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${(e.category || 'other').toLowerCase()}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#EF4444;font-weight:600">${fmt(e.amount)}</td>
+            </tr>`).join('');
+
+        const catRows = categoryPie.map((c) => `
+            <tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${c.name.toLowerCase()}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#EF4444;font-weight:600">${fmt(c.value)}</td>
+            </tr>`).join('');
+
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>CashWise Report ${dateFrom} – ${dateTo}</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; color: #111; padding: 32px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  .cards { display: flex; gap: 16px; margin-bottom: 28px; }
+  .card { flex: 1; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+  .card-label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+  .card-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 28px; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing:.05em; color:#6b7280; border-bottom: 2px solid #e5e7eb; }
+  tr:last-child td { border-bottom: none !important; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+<h1>CashWise Financial Report</h1>
+<p class="sub">Period: ${dateFrom} to ${dateTo} &nbsp;|&nbsp; Generated ${new Date().toLocaleDateString()}</p>
+<div class="cards">
+  <div class="card"><div class="card-label">Total Expenses</div><div class="card-value" style="color:#EF4444">${fmt(totalExp)}</div></div>
+  <div class="card"><div class="card-label">Total Income</div><div class="card-value" style="color:#10B981">${fmt(totalInc)}</div></div>
+  <div class="card"><div class="card-label">Net Balance</div><div class="card-value" style="color:${totalInc - totalExp >= 0 ? '#10B981' : '#EF4444'}">${fmt(totalInc - totalExp)}</div></div>
+</div>
+<h2>Expenses by Category</h2>
+<table><thead><tr><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>${catRows || '<tr><td colspan="2" style="padding:8px 12px;color:#6b7280">No data</td></tr>'}</tbody></table>
+<h2>Top Expenses</h2>
+<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:8px 12px;color:#6b7280">No data</td></tr>'}</tbody></table>
+</body></html>`;
+
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        if (win) {
+            win.onload = () => { win.print(); URL.revokeObjectURL(url); };
+        }
+    };
+
     if (loading) return <div className="flex justify-center py-20"><p className="text-muted font-medium">Loading...</p></div>;
 
     return (
         <div className="space-y-6">
             {/* Date range */}
-            <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                    <label className="block text-xs text-muted mb-1">From</label>
-                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <div className="flex flex-wrap gap-3 items-end justify-between">
+                <div className="flex flex-wrap gap-3 items-end">
+                    <div>
+                        <label className="block text-xs text-muted mb-1">From</label>
+                        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-muted mb-1">To</label>
+                        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs text-muted mb-1">To</label>
-                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                </div>
+                <button
+                    onClick={handleExportPdf}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold cursor-pointer border-none hover:bg-primary-dark"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Export PDF
+                </button>
             </div>
 
             {/* Summary cards */}

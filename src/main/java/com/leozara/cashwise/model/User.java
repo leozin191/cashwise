@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -38,6 +39,11 @@ public class User {
     @Size(max = 100)
     @Column(nullable = false)
     private String name;
+
+    @Size(min = 3, max = 30)
+    @Pattern(regexp = "^[a-z0-9_]+$", message = "Username must be lowercase alphanumeric and underscores only")
+    @Column(unique = true)
+    private String username;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

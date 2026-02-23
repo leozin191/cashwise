@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     TouchableWithoutFeedback,
     RefreshControl,
-    Alert,
     Modal,
     TextInput,
     ActivityIndicator,
@@ -20,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { expenseService, incomeService, subscriptionService } from '../services/api';
+import { expenseService, incomeService, subscriptionService, aiService } from '../services/api';
 import ExpenseCard from '../components/ExpenseCard';
 import ExpenseDetailModal from '../components/ExpenseDetailModal';
 import IncomeDetailModal from '../components/IncomeDetailModal';
@@ -41,18 +40,20 @@ import CurrencyDisplay from '../components/CurrencyDisplay';
 import MonthlyChart from '../components/MonthlyChart';
 import ForecastSection from '../components/ForecastSection';
 import FadeIn from '../components/FadeIn';
-import { formatDate, filterByThisMonth, filterByLast30Days, filterByAll, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
+import { formatDate, sortByNewest, sortByOldest, sortByHighest, sortByLowest, getHighestExpense, getAveragePerDay, getTopCategory } from '../utils/helpers';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import InstallmentsModal from '../components/InstallmentsModal';
 import InstallmentGroupsModal from '../components/InstallmentGroupsModal';
 import DeleteConfirmSheet from '../components/DeleteConfirmSheet';
+import SwipeableRow from '../components/SwipeableRow';
+import * as Haptics from 'expo-haptics';
 import { scheduleReminders } from '../utils/notifications';
 import { getBudgets } from '../utils/budgets';
 import currencyService from '../services/currency';
 import { getCurrencyByCode } from '../constants/currencies';
 import { runAutoBackupIfDue } from '../utils/backup';
 import { addDataChangedListener } from '../services/dataEvents';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     getInstallmentMeta,
     isInstallmentExpense,
@@ -61,6 +62,19 @@ import {
     getInstallmentGroup,
 } from '../utils/installments';
 import { createStyles } from './homeStyles';
+
+const getMonthKey = (dateValue) => {
+    if (!dateValue) return null;
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const filterByMonthKey = (items, monthKey) => {
+    const safeItems = Array.isArray(items) ? items : [];
+    if (!monthKey) return safeItems;
+    return safeItems.filter((item) => getMonthKey(item?.date) === monthKey);
+};
 
 export default function HomeScreen() {
     const navigation = useNavigation();
@@ -93,10 +107,34 @@ export default function HomeScreen() {
     const { language, t } = useLanguage();
     const { colors } = useTheme();
     const { currency } = useCurrency();
-    const { showSuccess } = useSnackbar();
+    const { showSuccess, showError } = useSnackbar();
 
-    const [filter, setFilter] = useState('thisMonth');
-    const [incomePeriodFilter, setIncomePeriodFilter] = useState('thisMonth');
+    const [selectedMonthKey, setSelectedMonthKey] = useState(() => getMonthKey(new Date()));
+
+    const currentMonthKey = useMemo(() => getMonthKey(new Date()), []);
+    const isCurrentMonth = selectedMonthKey === currentMonthKey;
+
+    const selectedMonthLabel = useMemo(() => {
+        if (!selectedMonthKey) return '';
+        const [year, month] = selectedMonthKey.split('-').map(Number);
+        const date = new Date(year, month - 1, 1);
+        const locale = language === 'en' ? 'en-US' : 'pt-BR';
+        return date.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+    }, [selectedMonthKey, language]);
+
+    const goToPrevMonth = () => {
+        const [year, month] = selectedMonthKey.split('-').map(Number);
+        const date = new Date(year, month - 2, 1);
+        setSelectedMonthKey(getMonthKey(date));
+    };
+
+    const goToNextMonth = () => {
+        if (isCurrentMonth) return;
+        const [year, month] = selectedMonthKey.split('-').map(Number);
+        const date = new Date(year, month, 1);
+        const newKey = getMonthKey(date);
+        if (newKey <= currentMonthKey) setSelectedMonthKey(newKey);
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [incomeSearchQuery, setIncomeSearchQuery] = useState('');
@@ -117,10 +155,42 @@ export default function HomeScreen() {
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [filteredTotals, setFilteredTotals] = useState({ expensesEUR: 0, incomeEUR: 0 });
     const [convertedFilteredExpenses, setConvertedFilteredExpenses] = useState([]);
+    const [insights, setInsights] = useState([]);
+    const [insightsLoading, setInsightsLoading] = useState(false);
 
     useEffect(() => {
         loadExpenses();
+        loadInsights();
     }, []);
+
+    const INSIGHTS_CACHE_KEY = '@ai_insights_cache';
+    const INSIGHTS_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+    const loadInsights = async ({ force = false } = {}) => {
+        setInsightsLoading(true);
+        try {
+            if (!force) {
+                const raw = await AsyncStorage.getItem(INSIGHTS_CACHE_KEY);
+                if (raw) {
+                    const { data, timestamp } = JSON.parse(raw);
+                    if (Date.now() - timestamp < INSIGHTS_TTL_MS && Array.isArray(data) && data.length > 0) {
+                        setInsights(data);
+                        setInsightsLoading(false);
+                        return;
+                    }
+                }
+            } else {
+                await AsyncStorage.removeItem(INSIGHTS_CACHE_KEY);
+            }
+            const data = await aiService.getInsights();
+            if (Array.isArray(data) && data.length > 0) {
+                setInsights(data);
+                await AsyncStorage.setItem(INSIGHTS_CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+            }
+        } catch { /* insights are optional, fail silently */ } finally {
+            setInsightsLoading(false);
+        }
+    };
 
     useEffect(() => {
         const subscription = addDataChangedListener((event) => {
@@ -154,7 +224,7 @@ export default function HomeScreen() {
 
     useEffect(() => {
         loadMonthlySummary();
-    }, [expenses, incomes, subscriptions]);
+    }, [expenses, incomes, subscriptions, selectedMonthKey]);
 
     useFocusEffect(
         useCallback(() => {
@@ -181,7 +251,7 @@ export default function HomeScreen() {
             setSubscriptions(safeSubscriptions);
             return safeExpenses;
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotLoad'));
+            showError(t('couldNotLoad'));
             setExpenses([]);
             setIncomes([]);
             setSubscriptions([]);
@@ -213,7 +283,7 @@ export default function HomeScreen() {
                 if (!rate) return amount;
                 return amount / rate;
             };
-            const monthExpenses = filterByThisMonth(expenses);
+            const monthExpenses = filterByMonthKey(expenses, selectedMonthKey);
             const totalsByCurrency = monthExpenses.reduce((acc, exp) => {
                 const code = exp?.currency || 'EUR';
                 const amount = Number(exp?.amount) || 0;
@@ -226,7 +296,7 @@ export default function HomeScreen() {
                 return { ...exp, _amountEUR: amountEUR };
             });
 
-            const monthIncomes = filterByThisMonth(incomes);
+            const monthIncomes = filterByMonthKey(incomes, selectedMonthKey);
             const convertedIncomes = monthIncomes.map((inc) => {
                 const amount = Number(inc.amount) || 0;
                 const amountEUR = convertToEUR(amount, inc.currency || 'EUR');
@@ -245,7 +315,6 @@ export default function HomeScreen() {
                 const amount = Number(sub.amount) || 0;
                 const amountEUR = convertToEUR(amount, sub.currency || 'EUR');
                 let monthly = amountEUR;
-                if (sub.frequency === 'WEEKLY') monthly *= 4.33;
                 if (sub.frequency === 'YEARLY') monthly /= 12;
                 return sum + (monthly || 0);
             }, 0);
@@ -286,7 +355,7 @@ export default function HomeScreen() {
 
     const deleteExpensesByIds = async (ids, successMessage, afterDelete) => {
         if (!ids || ids.length === 0) {
-            Alert.alert(t('error'), t('couldNotDelete'));
+            showError(t('couldNotDelete'));
             return;
         }
         setDeleting(true);
@@ -303,12 +372,12 @@ export default function HomeScreen() {
             );
             const hasFailure = results.some((result) => result.status === 'rejected');
             if (hasFailure) {
-                Alert.alert(t('error'), t('couldNotDelete'));
+                showError(t('couldNotDelete'));
             } else {
                 showSuccess(successMessage);
             }
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotDelete'));
+            showError(t('couldNotDelete'));
         } finally {
             setDeleting(false);
         }
@@ -317,16 +386,18 @@ export default function HomeScreen() {
     };
 
     const handleDeleteExpense = async (id) => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         await deleteExpensesByIds([id], t('expenseDeleted'));
     };
 
     const handleDeleteIncome = async (incomeId) => {
         if (!incomeId) return;
         try {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             await incomeService.delete(incomeId);
             showSuccess(t('incomeDeleted'));
         } catch (error) {
-            Alert.alert(t('error'), t('couldNotDelete'));
+            showError(t('couldNotDelete'));
         } finally {
             loadExpenses({ silent: true });
         }
@@ -416,26 +487,12 @@ export default function HomeScreen() {
 
     const getDateFilteredExpenses = () => {
         const safeExpenses = Array.isArray(expenses) ? expenses : [];
-        switch (filter) {
-            case 'thisMonth':
-                return filterByThisMonth(safeExpenses);
-            case 'last30Days':
-                return filterByLast30Days(safeExpenses);
-            default:
-                return filterByAll(safeExpenses);
-        }
+        return filterByMonthKey(safeExpenses, selectedMonthKey);
     };
 
     const getDateFilteredIncomes = () => {
         const safeIncomes = Array.isArray(incomes) ? incomes : [];
-        switch (incomePeriodFilter) {
-            case 'thisMonth':
-                return filterByThisMonth(safeIncomes);
-            case 'last30Days':
-                return filterByLast30Days(safeIncomes);
-            default:
-                return filterByAll(safeIncomes);
-        }
+        return filterByMonthKey(safeIncomes, selectedMonthKey);
     };
 
     const getSearchFilteredExpenses = (expensesToFilter = []) => {
@@ -526,7 +583,7 @@ export default function HomeScreen() {
 
     const filteredExpenses = useMemo(
         () => getFilteredExpenses() || [],
-        [expenses, filter, debouncedQuery, language, quickFilter]
+        [expenses, selectedMonthKey, debouncedQuery, language, quickFilter]
     );
 
     const categoryExpenses = useMemo(() => {
@@ -587,7 +644,7 @@ export default function HomeScreen() {
 
     const filteredIncomes = useMemo(
         () => sortByNewest(getFilteredIncomes()),
-        [incomes, incomePeriodFilter, debouncedIncomeQuery, incomeCategoryFilter, language, t]
+        [incomes, selectedMonthKey, debouncedIncomeQuery, incomeCategoryFilter, language, t]
     );
     const filteredTotal = filteredTotals.expensesEUR;
     const incomeTotal = filteredTotals.incomeEUR;
@@ -604,7 +661,7 @@ export default function HomeScreen() {
             const bLabel = t(`categories.${b}`) || b;
             return aLabel.localeCompare(bLabel);
         });
-    }, [incomes, incomePeriodFilter, language, t]);
+    }, [incomes, selectedMonthKey, language, t]);
 
     useEffect(() => {
         let isActive = true;
@@ -818,7 +875,7 @@ export default function HomeScreen() {
                 </View>
                 <View>
                     <Text style={styles.filterSummaryTitle}>{activeFilterMeta.label}</Text>
-                    <Text style={styles.filterSummarySubtitle}>{t(filter)}</Text>
+                    <Text style={styles.filterSummarySubtitle}>{selectedMonthLabel}</Text>
                 </View>
             </View>
             <View style={styles.filterSummaryRight}>
@@ -862,15 +919,26 @@ export default function HomeScreen() {
                         <Ionicons name="wallet-outline" size={24} color={colors.textWhite} style={{ marginRight: spacing.sm }} />
                         <Text style={styles.headerTitle}>{t('appName')}</Text>
                     </View>
-                    <TouchableOpacity
-                        style={styles.headerActionButton}
-                        onPress={() => navigation.navigate('Settings', { returnTo: returnToScreen })}
-                        activeOpacity={0.8}
-                        accessibilityLabel={t('settings')}
-                        accessibilityRole="button"
-                    >
-                        <Ionicons name="person-outline" size={18} color={colors.textWhite} />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                        <TouchableOpacity
+                            style={styles.headerActionButton}
+                            onPress={() => navigation.navigate('AIChat')}
+                            activeOpacity={0.8}
+                            accessibilityLabel={t('aiAssistant') || 'AI Assistant'}
+                            accessibilityRole="button"
+                        >
+                            <Ionicons name="sparkles-outline" size={18} color={colors.textWhite} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.headerActionButton}
+                            onPress={() => navigation.navigate('Settings', { returnTo: returnToScreen })}
+                            activeOpacity={0.8}
+                            accessibilityLabel={t('settings')}
+                            accessibilityRole="button"
+                        >
+                            <Ionicons name="person-outline" size={18} color={colors.textWhite} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </LinearGradient>
             <View style={styles.searchContainer}>
@@ -891,6 +959,36 @@ export default function HomeScreen() {
                         <Ionicons name="close-circle" size={20} color={colors.textLight} />
                     </TouchableOpacity>
                 )}
+            </View>
+
+            <View style={styles.monthNavigator}>
+                <TouchableOpacity
+                    onPress={goToPrevMonth}
+                    style={styles.monthNavArrow}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                    <Ionicons name="chevron-back" size={20} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => setSelectedMonthKey(currentMonthKey)}
+                    style={styles.monthNavCenter}
+                    activeOpacity={0.7}
+                >
+                    <Text style={styles.monthNavLabel}>{selectedMonthLabel}</Text>
+                    {!isCurrentMonth && (
+                        <Text style={styles.monthNavBack}>{t('backToToday') || 'Back to now'}</Text>
+                    )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={goToNextMonth}
+                    style={[styles.monthNavArrow, isCurrentMonth && styles.monthNavArrowDisabled]}
+                    activeOpacity={isCurrentMonth ? 1 : 0.7}
+                    disabled={isCurrentMonth}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                    <Ionicons name="chevron-forward" size={20} color={isCurrentMonth ? colors.border : colors.primary} />
+                </TouchableOpacity>
             </View>
 
             <View style={styles.stickySummary}>
@@ -916,13 +1014,67 @@ export default function HomeScreen() {
                     summaryLoading={summaryLoading}
                     totalsByCurrencyLabel={totalsByCurrencyLabel}
                 />
+                {(insightsLoading || insights.length > 0) && (
+                    <View style={styles.insightsSection}>
+                        <View style={styles.insightsSectionHeader}>
+                            <Text style={styles.insightsSectionTitle}>{t('aiInsights') || 'AI Insights'}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                                <TouchableOpacity
+                                    onPress={() => loadInsights({ force: true })}
+                                    disabled={insightsLoading}
+                                    activeOpacity={0.7}
+                                    accessibilityLabel="Refresh AI insights"
+                                >
+                                    <Ionicons
+                                        name="refresh-outline"
+                                        size={15}
+                                        color={insightsLoading ? colors.textLighter : colors.textLight}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.insightsSeeAll}
+                                    onPress={() => navigation.navigate('AIChat')}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.insightsSeeAllText}>{t('askAI') || 'Ask AI'}</Text>
+                                    <Ionicons name="chevron-forward" size={12} color={colors.primary} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        {insightsLoading ? (
+                            <View style={[styles.insightCard, { justifyContent: 'center' }]}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                        ) : (
+                            insights.slice(0, 3).map((insight, idx) => (
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={styles.insightCard}
+                                    onPress={() => navigation.navigate('AIChat')}
+                                    activeOpacity={0.75}
+                                >
+                                    <View style={styles.insightIconWrap}>
+                                        <Ionicons
+                                            name={insight.icon || 'sparkles-outline'}
+                                            size={18}
+                                            color={colors.primary}
+                                        />
+                                    </View>
+                                    <View style={styles.insightBody}>
+                                        <Text style={styles.insightTitle}>{insight.title}</Text>
+                                        <Text style={styles.insightMessage}>{insight.message}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))
+                        )}
+                    </View>
+                )}
                 {filterSummaryCard}
                 {showForecastAtTop && forecastSection}
                 <HomeIncomeSection
                     filteredIncomes={filteredIncomes}
                     incomeTotal={incomeTotal}
-                    incomePeriodFilter={incomePeriodFilter}
-                    setIncomePeriodFilter={setIncomePeriodFilter}
+                    monthLabel={selectedMonthLabel}
                     incomeSearchQuery={incomeSearchQuery}
                     setIncomeSearchQuery={setIncomeSearchQuery}
                     incomeCategoryFilter={incomeCategoryFilter}
@@ -949,9 +1101,7 @@ export default function HomeScreen() {
                             <Text style={styles.emptyText}>
                                 {searchQuery.trim()
                                     ? t('noResultsFound')
-                                    : filter === 'thisMonth'
-                                        ? t('noExpensesThisMonth')
-                                        : t('noExpensesLast30Days')
+                                    : t('noExpensesThisMonth')
                                 }
                             </Text>
                             <Text style={styles.emptySubtext}>
@@ -1169,16 +1319,24 @@ export default function HomeScreen() {
                                     </View>
                                 )}
                                 renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        activeOpacity={1}
-                                        onPress={() => {
+                                    <SwipeableRow
+                                        onDelete={() => {
                                             setShowCategoryModal(false);
-                                            setTimeout(() => setDetailExpense(item), 300);
+                                            setTimeout(() => openDeleteConfirm(item), 300);
                                         }}
-                                        style={styles.swipeRow}
+                                        colors={colors}
                                     >
-                                        <ExpenseCard expense={item} />
-                                    </TouchableOpacity>
+                                        <TouchableOpacity
+                                            activeOpacity={1}
+                                            onPress={() => {
+                                                setShowCategoryModal(false);
+                                                setTimeout(() => setDetailExpense(item), 300);
+                                            }}
+                                            style={styles.swipeRow}
+                                        >
+                                            <ExpenseCard expense={item} />
+                                        </TouchableOpacity>
+                                    </SwipeableRow>
                                 )}
                                 contentContainerStyle={styles.categoryListContent}
                                 stickySectionHeadersEnabled={false}
@@ -1271,6 +1429,7 @@ export default function HomeScreen() {
             <DeleteConfirmSheet
                 visible={!!deleteExpense}
                 isInstallment={deleteIsInstallment}
+                message={deleteExpense ? `"${deleteExpense.description}"\n${t('deleteConfirm')}` : undefined}
                 onClose={closeDeleteSheet}
                 onDelete={() => {
                     const target = deleteExpense;

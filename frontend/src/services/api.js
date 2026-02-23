@@ -14,8 +14,31 @@ const EXPENSES_URL = `${BASE_URL}/expenses`;
 const INCOMES_URL = `${BASE_URL}/incomes`;
 const SUBSCRIPTIONS_URL = `${BASE_URL}/subscriptions`;
 const AUTH_URL = `${BASE_URL}/auth`;
+const BUDGETS_URL = `${BASE_URL}/budgets`;
 
 const api = axios.create({ timeout: 15000 });
+
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const onRefreshed = (newToken) => {
+    refreshSubscribers.forEach((cb) => cb(newToken, null));
+    refreshSubscribers = [];
+};
+
+const onRefreshFailed = () => {
+    refreshSubscribers.forEach((cb) => cb(null, new Error('Token refresh failed')));
+    refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (callback) => {
+    refreshSubscribers.push(callback);
+};
+
+const forceLogout = () => {
+    localStorage.removeItem('cashwise_token');
+    window.dispatchEvent(new Event('auth:logout'));
+};
 
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('cashwise_token');
@@ -27,11 +50,47 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
     (response) => response,
-    (error) => {
-        if (error.response?.status === 401) {
-            localStorage.removeItem('cashwise_token');
-            window.dispatchEvent(new Event('auth:logout'));
+    async (error) => {
+        const originalRequest = error.config;
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            if (originalRequest.url?.includes('/auth/refresh')) {
+                forceLogout();
+                return Promise.reject(error);
+            }
+
+            if (isRefreshing) {
+                return new Promise((resolve, reject) => {
+                    addRefreshSubscriber((newToken, err) => {
+                        if (err || !newToken) return reject(err || new Error('Unauthorized'));
+                        originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+                        resolve(api(originalRequest));
+                    });
+                });
+            }
+
+            originalRequest._retry = true;
+            isRefreshing = true;
+
+            try {
+                const res = await api.post(`${AUTH_URL}/refresh`);
+                const { token: newToken } = res.data;
+
+                localStorage.setItem('cashwise_token', newToken);
+                api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+                onRefreshed(newToken);
+
+                originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+                return api(originalRequest);
+            } catch {
+                onRefreshFailed();
+                forceLogout();
+                return Promise.reject(error);
+            } finally {
+                isRefreshing = false;
+            }
         }
+
         return Promise.reject(error);
     }
 );
@@ -45,7 +104,11 @@ export const authService = {
     updateProfile: async (data) => (await api.put(`${AUTH_URL}/profile`, data)).data,
     changePassword: async (data) => (await api.put(`${AUTH_URL}/password`, data)).data,
     refreshToken: async () => (await api.post(`${AUTH_URL}/refresh`)).data,
-    deleteAccount: async () => (await api.delete(`${AUTH_URL}/account`)).data,
+    deleteAccount: async (password) => (await api.delete(`${AUTH_URL}/account`, { data: { password } })).data,
+    forgotPassword: async (email) => api.post(`${AUTH_URL}/forgot-password`, { email }),
+    resetPassword: async (token, newPassword) => api.post(`${AUTH_URL}/reset-password`, { token, newPassword }),
+    checkUsername: async (username) => (await api.get(`${AUTH_URL}/check-username/${encodeURIComponent(username)}`)).data,
+    setUsername: async (username) => (await api.put(`${AUTH_URL}/username`, { username })).data,
 };
 
 export const expenseService = {
@@ -79,4 +142,11 @@ export const subscriptionService = {
     toggle: async (id) => (await api.patch(`${SUBSCRIPTIONS_URL}/${id}/toggle`)).data,
     bulk: async (items) => (await api.post(`${SUBSCRIPTIONS_URL}/bulk`, items)).data,
     processNow: async () => (await api.post(`${SUBSCRIPTIONS_URL}/process`)).data
+};
+
+export const budgetService = {
+    getAll: async () => (await api.get(BUDGETS_URL)).data,
+    upsert: async (category, monthlyLimit, currency) =>
+        (await api.post(BUDGETS_URL, { category, monthlyLimit, currency })).data,
+    delete: async (id) => api.delete(`${BUDGETS_URL}/${id}`),
 };

@@ -2,6 +2,7 @@ package com.leozara.cashwise.controller;
 
 import com.leozara.cashwise.dto.*;
 import com.leozara.cashwise.service.AuthService;
+import java.util.Map;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -56,9 +57,34 @@ public class AuthController {
     }
 
     @DeleteMapping("/account")
-    public ResponseEntity<Void> deleteAccount(Authentication authentication) {
+    public ResponseEntity<Void> deleteAccount(Authentication authentication,
+                                               @Valid @RequestBody DeleteAccountRequest request) {
         Long userId = (Long) authentication.getPrincipal();
-        authService.deleteAccount(userId);
+        authService.deleteAccount(userId, request.getPassword());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/check-username/{username}")
+    public ResponseEntity<Map<String, Boolean>> checkUsername(@PathVariable String username) {
+        return ResponseEntity.ok(Map.of("available", authService.isUsernameAvailable(username)));
+    }
+
+    @PutMapping("/username")
+    public ResponseEntity<AuthResponse> setUsername(Authentication authentication,
+                                                     @Valid @RequestBody SetUsernameRequest request) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ResponseEntity.ok(authService.setUsername(userId, request.getUsername()));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok().build();
     }
 }

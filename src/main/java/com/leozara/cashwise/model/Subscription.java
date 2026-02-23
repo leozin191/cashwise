@@ -43,7 +43,7 @@ public class Subscription {
     private String category;
 
     @NotBlank
-    @Pattern(regexp = "MONTHLY|WEEKLY|YEARLY")
+    @Pattern(regexp = "MONTHLY|YEARLY")
     @Column(nullable = false)
     private String frequency;
 
@@ -61,6 +61,9 @@ public class Subscription {
 
     @Column(name = "user_id")
     private Long userId;
+
+    @Column(name = "household_id")
+    private Long householdId;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

@@ -269,6 +269,14 @@ export default function LoginScreen({ navigation }) {
                         )}
                     </TouchableOpacity>
 
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('ForgotPassword')}
+                        style={{ alignItems: 'center', marginTop: spacing.md }}
+                        accessibilityRole="link"
+                    >
+                        <Text style={styles.switchLink}>{t('forgotPassword') || 'Forgot password?'}</Text>
+                    </TouchableOpacity>
+
                     <View style={styles.switchRow}>
                         <Text style={styles.switchText}>{t('noAccount')} </Text>
                         <TouchableOpacity onPress={() => navigation.navigate('Register')} accessibilityLabel={t('registerHere')} accessibilityRole="link">

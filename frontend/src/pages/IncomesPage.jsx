@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { incomeService } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 import EmptyState from '../components/EmptyState';
 
-const empty = { description: '', amount: '', currency: 'EUR', date: new Date().toISOString().slice(0, 10) };
+const INCOME_CATEGORIES = ['SALARY', 'FREELANCE', 'INVESTMENT', 'RENTAL', 'GIFT', 'OTHER'];
+const empty = { description: '', amount: '', currency: 'EUR', date: new Date().toISOString().slice(0, 10), category: '' };
 
 export default function IncomesPage() {
     const [incomes, setIncomes] = useState([]);
@@ -22,7 +23,7 @@ export default function IncomesPage() {
             .then(setIncomes)
             .catch(() => toast.error('Failed to load incomes'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -43,7 +44,7 @@ export default function IncomesPage() {
 
     const openEdit = (inc) => {
         setEditId(inc.id);
-        setForm({ description: inc.description, amount: inc.amount, currency: inc.currency || 'EUR', date: inc.date });
+        setForm({ description: inc.description, amount: inc.amount, currency: inc.currency || 'EUR', date: inc.date, category: inc.category || '' });
         setEditModal(true);
     };
 
@@ -93,6 +94,13 @@ export default function IncomesPage() {
                         <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="e.g. Monthly salary" />
                     </div>
                     <div>
+                        <label className="block text-xs text-muted mb-1">Category</label>
+                        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                            <option value="">None</option>
+                            {INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>)}
+                        </select>
+                    </div>
+                    <div>
                         <label className="block text-xs text-muted mb-1">Amount</label>
                         <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
                     </div>
@@ -120,6 +128,7 @@ export default function IncomesPage() {
                                 <tr className="border-b border-border">
                                     <th className="text-left px-5 py-3 text-xs text-muted uppercase tracking-wide font-semibold">Date</th>
                                     <th className="text-left px-5 py-3 text-xs text-muted uppercase tracking-wide font-semibold">Description</th>
+                                    <th className="text-left px-5 py-3 text-xs text-muted uppercase tracking-wide font-semibold">Category</th>
                                     <th className="text-right px-5 py-3 text-xs text-muted uppercase tracking-wide font-semibold">Amount</th>
                                     <th className="text-right px-5 py-3 text-xs text-muted uppercase tracking-wide font-semibold">Actions</th>
                                 </tr>
@@ -129,6 +138,7 @@ export default function IncomesPage() {
                                     <tr key={i.id} className="border-b border-border last:border-b-0 hover:bg-canvas/50">
                                         <td className="px-5 py-3 text-muted">{i.date}</td>
                                         <td className="px-5 py-3 font-medium text-ink">{i.description}</td>
+                                        <td className="px-5 py-3">{i.category ? <span className="px-2 py-0.5 rounded-full bg-success/10 text-success text-xs font-medium">{i.category.charAt(0) + i.category.slice(1).toLowerCase()}</span> : <span className="text-muted text-xs">—</span>}</td>
                                         <td className="px-5 py-3 text-right font-semibold text-success">{fmt(i.amount)}</td>
                                         <td className="px-5 py-3 text-right">
                                             <button onClick={() => openEdit(i)} className="text-xs text-primary hover:underline cursor-pointer bg-transparent border-none mr-3">Edit</button>
@@ -150,6 +160,13 @@ export default function IncomesPage() {
                     <div>
                         <label className="block text-sm font-medium text-ink mb-1">Description</label>
                         <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-ink mb-1">Category</label>
+                        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                            <option value="">None</option>
+                            {INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>)}
+                        </select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>

@@ -1,4 +1,4 @@
-﻿import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback } from 'react-native';
+﻿import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback, Modal } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -227,21 +227,23 @@ export default function MonthlyChart({ expenses, onMonthPress, selectedMonthKey 
                 />
 
                 {activeBar && (
-                    <TouchableWithoutFeedback onPress={() => setActiveBar(null)}>
-                        <View style={styles.tooltipOverlay}>
-                            <View style={styles.tooltip}>
-                                <Text style={styles.tooltipTitle}>
-                                    {activeBar.monthLabel.toUpperCase()}
-                                </Text>
-                                <Text style={styles.tooltipText}>
-                                    {currencySymbol}{activeBar.value.toFixed(0)}
-                                </Text>
-                                <Text style={styles.tooltipSubtext}>
-                                    {activeBar.count} {t('expenses').toLowerCase()}
-                                </Text>
+                    <Modal transparent animationType="fade" onRequestClose={() => setActiveBar(null)}>
+                        <TouchableWithoutFeedback onPress={() => setActiveBar(null)}>
+                            <View style={styles.tooltipOverlay}>
+                                <View style={styles.tooltip}>
+                                    <Text style={styles.tooltipTitle}>
+                                        {activeBar.monthLabel.toUpperCase()}
+                                    </Text>
+                                    <Text style={styles.tooltipText}>
+                                        {currencySymbol}{activeBar.value.toFixed(0)}
+                                    </Text>
+                                    <Text style={styles.tooltipSubtext}>
+                                        {activeBar.count} {t('expenses').toLowerCase()}
+                                    </Text>
+                                </View>
                             </View>
-                        </View>
-                    </TouchableWithoutFeedback>
+                        </TouchableWithoutFeedback>
+                    </Modal>
                 )}
             </View>
 
@@ -342,11 +344,10 @@ const createStyles = (colors) => StyleSheet.create({
         color: colors.textLight,
     },
     tooltipOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: colors.overlayLight,
-        borderRadius: borderRadius.md,
+        backgroundColor: 'rgba(0,0,0,0.25)',
     },
     tooltip: {
         backgroundColor: colors.text,

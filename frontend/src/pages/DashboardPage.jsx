@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { expenseService, incomeService, subscriptionService } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -31,7 +31,7 @@ export default function DashboardPage() {
             })
             .catch(() => toast.error('Failed to load dashboard data'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [toast]);
 
     const totalExpenses = useMemo(() => expenses.reduce((s, e) => s + Number(e.amount), 0), [expenses]);
     const totalIncomes = useMemo(() => incomes.reduce((s, i) => s + Number(i.amount), 0), [incomes]);

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -18,7 +18,6 @@ import { generateReportHTML } from '../utils/pdfGenerator';
 
 export default function ReportSettingsScreen() {
     const navigation = useNavigation();
-    const route = useRoute();
     const { language, t } = useLanguage();
     const { colors } = useTheme();
     const { currency, getCurrencyInfo } = useCurrency();
@@ -173,16 +172,7 @@ export default function ReportSettingsScreen() {
     };
 
     const handleClose = () => {
-        const returnTo = route.params?.returnTo;
-        if (returnTo) {
-            navigation.navigate(returnTo);
-            return;
-        }
-        if (navigation.canGoBack()) {
-            navigation.goBack();
-        } else {
-            navigation.navigate('Settings');
-        }
+        navigation.goBack();
     };
 
     const styles = createStyles(colors);

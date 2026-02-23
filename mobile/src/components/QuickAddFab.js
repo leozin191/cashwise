@@ -71,6 +71,12 @@ export default function QuickAddFab({ navigationRef }) {
                     outputRange: [1, 0.96],
                 }),
             },
+            {
+                rotate: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '45deg'],
+                }),
+            },
         ],
     };
 
@@ -109,7 +115,7 @@ export default function QuickAddFab({ navigationRef }) {
                         accessibilityLabel={open ? t('cancel') : t('quickAdd')}
                         accessibilityRole="button"
                     >
-                        <Ionicons name={open ? 'close' : 'add'} size={24} color={colors.textWhite} />
+                        <Ionicons name="add" size={24} color={colors.textWhite} />
                     </TouchableOpacity>
                 </Animated.View>
             </View>

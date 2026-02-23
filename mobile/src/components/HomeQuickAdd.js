@@ -7,6 +7,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrencyByCode } from '../constants/currencies';
 import { createStyles } from '../screens/homeStyles';
+import CategoryIcon from './CategoryIcon';
+import { normalizeCategory } from '../constants/categories';
 
 export default function HomeQuickAdd({ quickAddItems, onQuickAdd }) {
     const { t } = useLanguage();
@@ -18,7 +20,7 @@ export default function HomeQuickAdd({ quickAddItems, onQuickAdd }) {
     return (
         <View style={styles.quickAddSection}>
             <View style={styles.quickAddHeader}>
-                <Ionicons name="flash-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                <Ionicons name="time-outline" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
                 <View style={styles.quickAddHeaderText}>
                     <Text style={styles.quickAddTitle}>{t('quickAdd')}</Text>
                     <Text style={styles.quickAddHint}>{t('quickAddHint')}</Text>
@@ -35,12 +37,21 @@ export default function HomeQuickAdd({ quickAddItems, onQuickAdd }) {
                                 onPress={() => onQuickAdd(item)}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.quickAddChipTitle} numberOfLines={1}>
-                                    {item.description}
-                                </Text>
-                                <Text style={styles.quickAddChipAmount}>
-                                    {symbol}{Number(item.amount).toFixed(2)}
-                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                                    <CategoryIcon
+                                        category={normalizeCategory(item.category)}
+                                        size={16}
+                                        color={colors.primary}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.quickAddChipTitle} numberOfLines={1}>
+                                            {item.description}
+                                        </Text>
+                                        <Text style={styles.quickAddChipAmount}>
+                                            {symbol}{Number(item.amount).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                </View>
                             </TouchableOpacity>
                         );
                     })}

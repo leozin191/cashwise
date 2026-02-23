@@ -30,4 +30,14 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @Modifying
     @Query("DELETE FROM Subscription s WHERE s.userId = :userId")
     void deleteByUserId(Long userId);
+
+    List<Subscription> findByHouseholdId(Long householdId);
+
+    Page<Subscription> findByHouseholdId(Long householdId, Pageable pageable);
+
+    Optional<Subscription> findByIdAndHouseholdId(Long id, Long householdId);
+
+    List<Subscription> findByActiveTrueAndHouseholdId(Long householdId);
+
+    List<Subscription> findByActiveTrueAndNextDueDateLessThanEqualAndHouseholdId(LocalDate date, Long householdId);
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { authService, apiMeta } from '../services/api';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/useToast';
 import Modal from '../components/Modal';
 
 export default function SettingsPage() {
@@ -20,6 +20,7 @@ export default function SettingsPage() {
 
     // Delete
     const [deleteConfirm, setDeleteConfirm] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
 
     // API test
     const [apiStatus, setApiStatus] = useState(null);
@@ -59,12 +60,16 @@ export default function SettingsPage() {
     };
 
     const handleDeleteAccount = async () => {
+        if (!deletePassword) {
+            toast.error('Please enter your password to confirm');
+            return;
+        }
         try {
-            await authService.deleteAccount();
+            await authService.deleteAccount(deletePassword);
             toast.success('Account deleted');
             logout();
-        } catch {
-            toast.error('Failed to delete account');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to delete account');
         }
     };
 
@@ -146,10 +151,17 @@ export default function SettingsPage() {
             </div>
 
             {/* Delete confirmation */}
-            <Modal open={deleteConfirm} onClose={() => setDeleteConfirm(false)} title="Delete Account">
-                <p className="text-sm text-muted mb-4">This will permanently delete your account and all associated data. Are you absolutely sure?</p>
+            <Modal open={deleteConfirm} onClose={() => { setDeleteConfirm(false); setDeletePassword(''); }} title="Delete Account">
+                <p className="text-sm text-muted mb-4">This will permanently delete your account and all associated data. Enter your password to confirm.</p>
+                <input
+                    type="password"
+                    placeholder="Your password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:outline-none focus:ring-2 focus:ring-error/30 mb-4"
+                />
                 <div className="flex gap-3 justify-end">
-                    <button onClick={() => setDeleteConfirm(false)} className="px-4 py-2 rounded-xl bg-canvas text-ink text-sm font-medium cursor-pointer border border-border">Cancel</button>
+                    <button onClick={() => { setDeleteConfirm(false); setDeletePassword(''); }} className="px-4 py-2 rounded-xl bg-canvas text-ink text-sm font-medium cursor-pointer border border-border">Cancel</button>
                     <button onClick={handleDeleteAccount} className="px-4 py-2 rounded-xl bg-error text-white text-sm font-semibold cursor-pointer border-none">Delete Forever</button>
                 </div>
             </Modal>

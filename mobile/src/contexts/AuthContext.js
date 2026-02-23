@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
         setOnTokenRefreshed(async (newToken, data) => {
             setToken(newToken);
             if (data?.name && data?.email) {
-                const userData = { name: data.name, email: data.email };
+                const userData = { name: data.name, email: data.email, username: data.username || null };
                 setUser(userData);
                 await storeCredentials(newToken, userData);
             } else {
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
                 if (userData?.name && userData?.email) {
                     setAuthToken(storedToken);
                     setToken(storedToken);
-                    setUser(userData);
+                    setUser({ name: userData.name, email: userData.email, username: userData.username || null });
                 } else {
                     await clearCredentials();
                 }
@@ -77,8 +77,8 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         const response = await authService.login(email, password);
-        const { token: newToken, name, email: userEmail } = response;
-        const userData = { name, email: userEmail };
+        const { token: newToken, name, email: userEmail, username } = response;
+        const userData = { name, email: userEmail, username: username || null };
 
         setAuthToken(newToken);
         setToken(newToken);
@@ -89,10 +89,10 @@ export const AuthProvider = ({ children }) => {
         return response;
     };
 
-    const register = async (name, email, password) => {
-        const response = await authService.register(name, email, password);
-        const { token: newToken, name: userName, email: userEmail } = response;
-        const userData = { name: userName, email: userEmail };
+    const register = async (name, email, password, username) => {
+        const response = await authService.register(name, email, password, username);
+        const { token: newToken, name: userName, email: userEmail, username: userUsername } = response;
+        const userData = { name: userName, email: userEmail, username: userUsername || null };
 
         setAuthToken(newToken);
         setToken(newToken);
@@ -100,6 +100,17 @@ export const AuthProvider = ({ children }) => {
 
         await storeCredentials(newToken, userData);
 
+        return response;
+    };
+
+    const setUsername = async (username) => {
+        const response = await authService.setUsername(username);
+        const { token: newToken, name, email: userEmail, username: newUsername } = response;
+        const userData = { name, email: userEmail, username: newUsername };
+        setAuthToken(newToken);
+        setToken(newToken);
+        setUser(userData);
+        await storeCredentials(newToken, userData);
         return response;
     };
 
@@ -111,8 +122,8 @@ export const AuthProvider = ({ children }) => {
         return profile;
     };
 
-    const deleteAccount = async () => {
-        await authService.deleteAccount();
+    const deleteAccount = async (password) => {
+        await authService.deleteAccount(password);
         await logout();
     };
 
@@ -126,12 +137,13 @@ export const AuthProvider = ({ children }) => {
             AsyncStorage.removeItem('@budgets'),
             AsyncStorage.removeItem('@subscriptions_last_processed'),
             AsyncStorage.removeItem('@user_email'),
+            AsyncStorage.removeItem('@api_cache:household'),
             clearAllCaches(),
         ]);
     };
 
     return (
-        <AuthContext.Provider value={{ token, user, isLoading, login, register, logout, updateProfile, deleteAccount }}>
+        <AuthContext.Provider value={{ token, user, isLoading, login, register, logout, updateProfile, deleteAccount, setUsername }}>
             {children}
         </AuthContext.Provider>
     );
